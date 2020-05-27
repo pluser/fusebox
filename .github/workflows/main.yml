@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  docker_registory: docker.pkg.github.com
+
+jobs:
+  unit_test_a:
+    name: Stub Unit Test A
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
