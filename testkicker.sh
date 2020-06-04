@@ -1,8 +1,7 @@
 #!/bin/bash -x
 
 echo '*** Installing system packages/modules etc...'
-echo -e 'dev-python/pip vanilla\ndev-vcs/git -perl' >> /etc/portage/package.use/base.conf
-emerge --quiet --buildpkg --usepkg sys-fs/fuse dev-python/pip dev-vcs/git
+emerge --noreplace --quiet --buildpkg --usepkg sys-fs/fuse dev-python/pip dev-vcs/git
 pip install poetry
 echo '*** Installing is done.'
 
