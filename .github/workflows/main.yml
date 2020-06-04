@@ -15,6 +15,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+    - name: Make cache directory
+      run: mkdir -p ./.cache/distfiles ./.cache/binpkgs
+    - name: Cache distfiles for portage
+      uses: actions/cache@v1
+      env:
+        cache-name: cache-portage-distfiles
+      with:
+        path: ./.cache/distfiles
+        key:  ${{ runner.os }}-build-${{ env.cache-name }}
+    - name: Cache binpkgs for portage
+      uses: actions/cache@v1
+      env:
+        cache-name: cache-portage-binpkgs
+      with:
+        path: ./cache/binpkgs
+        key:  ${{ runner.os }}-build-${{ env.cache-name }}
     - run: |
         docker build . -t testenv
-        docker run --mount type=bind,src=$(pwd),dst=/fusebox testenv bash /fusebox/testkicker.sh
+        docker run \
+        --mount type=bind,src=$(pwd),dst=/fusebox \
+        --mount type=bind,src=$(pwd)/.cache/distfiles,dst=/var/cache/distfiles \
+        --mount type=bind,src=$(pwd)/.cache/binpkgs,dst=/var/cache/binpkgs \
+        testenv bash /fusebox/testkicker.sh
