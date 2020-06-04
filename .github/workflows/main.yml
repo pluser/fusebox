@@ -10,8 +10,7 @@ env:
   docker_registory: docker.pkg.github.com
 
 jobs:
-  unit_test_a:
-    name: Stub Unit Test A
+  test:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -31,7 +30,8 @@ jobs:
       with:
         path: ./.cache/binpkgs
         key:  ${{ runner.os }}-build-${{ env.cache-name }}
-    - run: |
+    - name: Build environment and kick script
+      run: |
         docker build . -t testenv
         docker run \
         --mount type=bind,src=$(pwd),dst=/fusebox \
