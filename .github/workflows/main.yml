@@ -30,9 +30,10 @@ jobs:
       with:
         path: ./.cache/binpkgs
         key:  ${{ runner.os }}-build-${{ env.cache-name }}-${{ github.sha }}
-    - name: Build environment and kick script
+    - name: Build environment
+      run: DOCKER_BUILDKIT=1 docker build . -t testenv
+    - name: Kick test script
       run: |
-        DOCKER_BUILDKIT=1 docker build . -t testenv
         docker run \
         --mount type=bind,src=$(pwd),dst=/fusebox \
         --mount type=bind,src=$(pwd)/.cache/distfiles,dst=/var/cache/distfiles \
