@@ -26,6 +26,8 @@ class TestFS(pyfuse3.Operations):
         self._inode_fd_map = dict()
         self._inode_path_map[pyfuse3.ROOT_INODE].add(path_source)
         self._lookup_count = defaultdict(int)
+        self._fd_open_count = defaultdict(int)
+        self._fd_inode_map = dict()
 
     def _inode_to_path(self, inode):
         if inode in self._inode_path_map:
@@ -103,6 +105,37 @@ class TestFS(pyfuse3.Operations):
                 break
             self._remember_path(ino, os.path.join(path, name))
 
+    async def open(self, inode, flags, ctx):
+        if inode in self._inode_fd_map:
+            self._fd_open_count[fd] += 1
+            return pyfuse3.FileInfo(fh=fd)
+        try:
+            fd = os.open(self._inode_to_path(inode), flags)
+        except OSError as exc:
+            raise pyfuse3.FUSEError(exc.errno)
+        self._inode_fd_map[inode] = fd
+        self._fd_inode_map[fd] = inode
+        self._fd_open_count[fd] = 1
+        return pyfuse3.FileInfo(fh=fd)
+
+    async def read(self, fd, offset, length):
+        os.lseek(fd, offset, os.SEEK_SET)
+        return os.read(fd, length)
+
+    async def release(self, fd):
+        if self._fd_open_count[fd] > 1:
+            self._fd_open_count[fd] -= 1
+            return
+
+        assert self._fd_open_count[fd] == 1
+        del self._fd_open_count[fd]
+        inode = self._fd_inode_map[fd]
+        del self._inode_fd_map[inode]
+        del self._fd_inode_map[fd]
+        try:
+            os.close(fd)
+        except OSError as exc:
+            raise pyfuse3.FUSEError(exc.errno)
 
 def main():
     ### parse command line ###
