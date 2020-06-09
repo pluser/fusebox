@@ -40,6 +40,11 @@ class TestFS(pyfuse3.Operations):
         self._lookup_count[inode] += 1
         self._inode_path_map[inode].add(path)
         return
+
+    def _delete_path(self, inode, path):
+        self._inode_path_map[inode].remove(path)
+        if self._inode_path_map[inode]:
+            del self._inode_path_map[inode]
             
     async def getattr(self, inode, ctx=None):
         if inode in self._inode_fd_map:
