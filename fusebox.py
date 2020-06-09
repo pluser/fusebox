@@ -36,12 +36,12 @@ class TestFS(pyfuse3.Operations):
         path = next(iter(path_set)) # FIXME: not good handling for hardlinks
         return path
 
-    def _add_path(self, inode, path):
+    def _remember_path(self, inode, path):
         self._lookup_count[inode] += 1
         self._inode_path_map[inode].add(path)
         return
 
-    def _delete_path(self, inode, path):
+    def _forget_path(self, inode, path):
         self._inode_path_map[inode].remove(path)
         if self._inode_path_map[inode]:
             del self._inode_path_map[inode]
@@ -80,7 +80,7 @@ class TestFS(pyfuse3.Operations):
         path = os.path.join(self._inode_to_path(inode_parent), name_dec)
         attr = self._getattr(path=path)
         if name_dec != '.' and name_dec != '..':
-            self._add_path(attr.st_ino, path)
+            self._remember_path(attr.st_ino, path)
         return attr
 
     async def opendir(self, inode, ctx):
@@ -101,7 +101,8 @@ class TestFS(pyfuse3.Operations):
                 continue
             if not pyfuse3.readdir_reply(token, os.fsencode(name), attr, ino):
                 break
-            self._add_path(ino, os.path.join(path, name))
+            self._remember_path(ino, os.path.join(path, name))
+
 
 def main():
     ### parse command line ###
