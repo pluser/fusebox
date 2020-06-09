@@ -36,9 +36,9 @@ class TestFS(pyfuse3.Operations):
         path = next(iter(path_set)) # FIXME: not good handling for hardlinks
         return path
 
-    def _add_path(self, inode, path_given):
+    def _add_path(self, inode, path):
         self._lookup_count[inode] += 1
-        self._inode_path_map[inode].add(path_given)
+        self._inode_path_map[inode].add(path)
         return
             
     async def getattr(self, inode, ctx=None):
