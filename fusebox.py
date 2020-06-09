@@ -31,7 +31,7 @@ class TestFS(pyfuse3.Operations):
         if inode in self._inode_path_map:
             path_set = self._inode_path_map[inode]
         else:
-            raise FUSEError(errno.ENOENT)
+            raise pyfuse3.FUSEError(errno.ENOENT)
 
         path = next(iter(path_set)) # FIXME: not good handling for hardlinks
         return path
@@ -54,7 +54,7 @@ class TestFS(pyfuse3.Operations):
         try:
             stat = os.lstat(path) if path else os.fstat(fd)
         except OSError as exc:
-            raise FUSEError(exc.errno)
+            raise pyfuse3.FUSEError(exc.errno)
 
         entry = pyfuse3.EntryAttributes()
         # copy attrs from base FS.
