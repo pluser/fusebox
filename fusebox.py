@@ -122,6 +122,24 @@ class TestFS(pyfuse3.Operations):
         os.lseek(fd, offset, os.SEEK_SET)
         return os.read(fd, length)
 
+    async def create(self, inode_parent, name, mode, flags, ctx):
+        path = os.path.join(self._inode_to_path(inode_parent), os.fsdecode(name))
+        try:
+            fd = os.open(path, flags | os.O_CREAT | os.O_TRUNC)
+        except OSError as exc:
+            raise pyfuse3.FUSEError(exc.errno)
+        attr = self._getattr(fd=fd)
+        inode = attr.st_ino
+        self._remember_path(inode, path)
+        self._inode_fd_map[inode] = fd
+        self._fd_inode_map[fd] = inode
+        self._fd_open_count[fd] = 1
+        return pyfuse3.FileInfo(fh=fd), attr
+
+    async def write(self, fd, offset, buf):
+        os.lseek(fd, offset, os.SEEK_SET)
+        return os.write(fd, buf)
+    
     async def release(self, fd):
         if self._fd_open_count[fd] > 1:
             self._fd_open_count[fd] -= 1
@@ -136,7 +154,6 @@ class TestFS(pyfuse3.Operations):
             os.close(fd)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
-
 def main():
     ### parse command line ###
     parser = argparse.ArgumentParser()
