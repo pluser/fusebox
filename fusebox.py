@@ -77,6 +77,14 @@ class TestFS(pyfuse3.Operations):
 
         return entry
 
+    async def readlink(self, inode, ctx):
+        path = self._inode_to_path(inode)
+        try:
+            target = os.readlink(path)
+        except OSError as exc:
+            raise pyfuse3.FUSEError(exc.errno)
+        return os.fsencode(target)
+
     async def lookup(self, inode_parent, name, ctx=None):
         name_dec = os.fsdecode(name)
         path = os.path.join(self._inode_to_path(inode_parent), name_dec)
