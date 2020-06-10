@@ -105,6 +105,29 @@ class TestFS(pyfuse3.Operations):
                 break
             self._remember_path(ino, os.path.join(path, name))
 
+    async def mkdir(self, inode_parent, name, mode, ctx):
+        path = os.path.join(self._inode_to_path(inode_parent), os.fsdecode(name))
+        try:
+            os.mkdir(path, mode=(mode & ~ctx.umask))
+            os.chown(path, ctx.uid, ctx.gid)
+        except OSError as exc:
+            raise pyfuse3.FUSEError(exc.errno)
+        attr = self._getattr(path=path)
+        inode = attr.st_ino
+        self._remember_path(inode, path)
+        return attr
+
+    async def rmdir(self, inode_parent, name, ctx):
+        path = os.path.join(self._inode_to_path(inode_parent), os.fsdecode(name))
+        try:
+            attr = os.lstat(path)
+            os.rmdir(path)
+        except OSError as exc:
+            raise pyfuse3.FUSEError(exc.errno)
+        inode = attr.st_ino
+        if inode in self._lookup_count:
+            self._forget_path(inode, path)
+
     async def open(self, inode, flags, ctx):
         if inode in self._inode_fd_map:
             self._fd_open_count[fd] += 1
