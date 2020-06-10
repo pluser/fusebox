@@ -130,6 +130,7 @@ class TestFS(pyfuse3.Operations):
 
     async def open(self, inode, flags, ctx):
         if inode in self._inode_fd_map:
+            fd = self._inode_fd_map[inode]
             self._fd_open_count[fd] += 1
             return pyfuse3.FileInfo(fh=fd)
         try:
