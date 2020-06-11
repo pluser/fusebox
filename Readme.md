@@ -1,8 +1,8 @@
-# FUSEbox - A new sandbox implemented with FUSE (Filesystem in Userspace)
+# Fusebox - A new sandbox implemented with FUSE (Filesystem in Userspace)
 
 ## What is this
 
-FUSEbox is new implementation of sandbox for Portage (package system for Gentoo Project).
+Fusebox is new implementation of sandbox for Portage (package system for Gentoo Project).
 
 The sandbox currently used in the Portage package system hooks up writes to the file system by using LD_PRELOAD, but this method has a few drawbacks.  This project develops a new sandbox mechanism based on FUSE, while maintaining compatibility.
 
