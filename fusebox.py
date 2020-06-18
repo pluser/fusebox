@@ -39,6 +39,8 @@ class TestFS(pyfuse3.Operations):
         return path
 
     def _remember_path(self, inode, path):
+        if inode == 1:
+            return
         self._lookup_count[inode] += 1
         self._inode_path_map[inode].add(path)
         return
