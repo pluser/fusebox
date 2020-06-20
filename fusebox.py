@@ -10,6 +10,7 @@ import sys
 import stat
 import pyfuse3
 import trio
+import subprocess
 
 import faulthandler
 faulthandler.enable()
@@ -28,6 +29,8 @@ class TestFS(pyfuse3.Operations):
         self._lookup_count = defaultdict(int)
         self._fd_open_count = defaultdict(int)
         self._fd_inode_map = dict()
+        stat_source = os.lstat(path_source)
+        self._src_device = stat_source.st_dev
 
     def _inode_to_path(self, inode):
         if inode in self._inode_path_map:
@@ -40,6 +43,7 @@ class TestFS(pyfuse3.Operations):
 
     def _remember_path(self, inode, path):
         if inode == 1:
+            logger.warn('remember_path called with inode:{}, path:{}'.format(inode, path))
             return
         self._lookup_count[inode] += 1
         self._inode_path_map[inode].add(path)
@@ -59,11 +63,12 @@ class TestFS(pyfuse3.Operations):
     def _getattr(self, path=None, fd=None):
         assert fd is None or path is None
         assert not(fd is None and path is None)
-
+        logger.debug('getatter path: {}, fd: {}'.format(path, fd))
         try:
             stat = os.lstat(path) if path else os.fstat(fd)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
+
 
         entry = pyfuse3.EntryAttributes()
         # copy attrs from base FS.
@@ -76,6 +81,12 @@ class TestFS(pyfuse3.Operations):
         entry.attr_timeout = 0
         entry.st_blksize = 512
         entry.st_blocks = ((entry.st_size+entry.st_blksize-1) // entry.st_blksize)
+
+        # FIXME: fixed inode will be conflict another inode
+        if path == '/proc':
+            entry.st_ino = 2222222
+        if path == '/sys':
+            entry.st_ino = 3333333
 
         return entry
 
@@ -123,7 +134,6 @@ class TestFS(pyfuse3.Operations):
             raise pyfuse3.FUSEError(exc)
 
         return await self.getattr(inode)
-            
 
     async def readlink(self, inode, ctx):
         path = self._inode_to_path(inode)
@@ -219,7 +229,7 @@ class TestFS(pyfuse3.Operations):
     async def write(self, fd, offset, buf):
         os.lseek(fd, offset, os.SEEK_SET)
         return os.write(fd, buf)
-    
+
     async def release(self, fd):
         if self._fd_open_count[fd] > 1:
             self._fd_open_count[fd] -= 1
@@ -234,6 +244,21 @@ class TestFS(pyfuse3.Operations):
             os.close(fd)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
+async def mount_pseudo_fs(mountpoint):
+    await trio.sleep(2)
+    logger.debug('mount pseudo fs')
+    p_proc = subprocess.Popen(['/bin/mount', '-t', 'proc', 'proc', '{}/proc'.format(mountpoint)])
+    p_sys = subprocess.Popen(['/bin/mount', '-t', 'sysfs', 'sys', '{}/sys'.format(mountpoint)])
+    p_dev = subprocess.Popen(['/bin/mount', '--rbind', '/dev', '{}/dev'.format(mountpoint)])
+    p_proc.wait()
+    p_sys.wait()
+    logger.debug('complete mount pseudo fs')
+
+async def start(mountpoint):
+    async with trio.open_nursery() as nursery:
+        nursery.start_soon(pyfuse3.main)
+        #nursery.start_soon(mount_pseudo_fs, mountpoint)
+
 def main():
     ### parse command line ###
     parser = argparse.ArgumentParser()
@@ -261,9 +286,11 @@ def main():
     fuse_options = set(pyfuse3.default_options)
     fuse_options.add('fsname=testfs')
     fuse_options.add('debug')
+    fuse_options.add('dev')
     pyfuse3.init(testfs, args.mountpoint, fuse_options)
     try:
-        trio.run(pyfuse3.main)
+        #trio.run(pyfuse3.main)
+        trio.run(start, args.mountpoint)
     except:
         pyfuse3.close(unmount=False)
         raise RuntimeError
