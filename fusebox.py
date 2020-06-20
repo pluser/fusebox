@@ -244,6 +244,30 @@ class TestFS(pyfuse3.Operations):
             os.close(fd)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
+
+    async def link(self, inode, new_inode_parent, new_name_enced, ctx):
+        new_name = os.fsdecode(new_name_enced)
+        parent = self._inode_to_path(new_inode_parent)
+        path = os.path.join(parent, new_name)
+        try:
+            os.link(self._inode_to_path(inode), path, follow_symlinks=False)
+        except OSError as exc:
+            raise FUSEError(exc.errno)
+        self._remember_path(inode, path)
+        return await self.getattr(inode)
+
+    async def unlink(self, inode_parent, name_enced, ctx):
+        name = os.fsdecode(name_enced)
+        parent = self._inode_to_path(inode_parent)
+        path = os.path.join(parent, name)
+        try:
+            inode = os.lstat(path).st_ino
+            os.unlink(path)
+        except OSError as exc:
+            raise FUSEError(exc.errno)
+        if inode in self._lookup_count:
+            self._forget_path(inode, path)
+
 async def mount_pseudo_fs(mountpoint):
     await trio.sleep(2)
     logger.debug('mount pseudo fs')
