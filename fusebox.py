@@ -287,6 +287,21 @@ class TestFS(pyfuse3.Operations):
         if inode in self._lookup_count:
             self._forget_path(inode, path)
 
+    async def symlink(self, inode_parent, source_enced, target_enced, ctx):
+        source = os.fsdecode(source_enced)
+        target = os.fsdecode(target_enced)
+        parent = self._inode_to_path(inode_parent)
+        path = os.path.join(parent, source)
+        try:
+            os.symlink(target, path)
+            os.chown(path, ctx.uid, ctx.gid, follow_symlinks=False)
+        except OSError as exc:
+            raise pyfuse3.FUSEError(exc.errno)
+        stat = os.lstat(path)
+        self._remember_path(stat.st_ino, path)
+        return await self.getattr(stat.st_ino)
+
+
 async def mount_pseudo_fs(mountpoint):
     await trio.sleep(2)
     logger.debug('mount pseudo fs')
