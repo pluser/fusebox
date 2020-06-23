@@ -245,6 +245,25 @@ class TestFS(pyfuse3.Operations):
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
 
+    async def rename(self, inode_old_parent, name_old_enced, inode_new_parent, name_new_enced, flags, ctx):
+        name_old = os.fsdecode(name_old_enced)
+        name_new = os.fsdecode(name_new_enced)
+        parent_old = self._inode_to_path(inode_old_parent)
+        paent_new = self._inode_to_path(inode_new_parent)
+        path_old = os.path.join(parent_old, name_old)
+        path_new = os.path.join(parent_new, name_new)
+        try:
+            os.rename(path_old, path_new)
+            inode = os.lstat(path_new).st_ino
+        except OSError as exc:
+            raise pyfuse3.FUSEError(exc.errno)
+
+        if inode not in self._lookup_count:
+            return
+
+        self._remember_path(inode, path_new)
+        self._forget_path(inode, path_old)
+
     async def link(self, inode, new_inode_parent, new_name_enced, ctx):
         new_name = os.fsdecode(new_name_enced)
         parent = self._inode_to_path(new_inode_parent)
