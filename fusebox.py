@@ -249,7 +249,7 @@ class TestFS(pyfuse3.Operations):
         name_old = os.fsdecode(name_old_enced)
         name_new = os.fsdecode(name_new_enced)
         parent_old = self._inode_to_path(inode_old_parent)
-        paent_new = self._inode_to_path(inode_new_parent)
+        parent_new = self._inode_to_path(inode_new_parent)
         path_old = os.path.join(parent_old, name_old)
         path_new = os.path.join(parent_new, name_new)
         try:
