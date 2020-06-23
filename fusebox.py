@@ -252,7 +252,7 @@ class TestFS(pyfuse3.Operations):
         try:
             os.link(self._inode_to_path(inode), path, follow_symlinks=False)
         except OSError as exc:
-            raise FUSEError(exc.errno)
+            raise pyfuse3.FUSEError(exc.errno)
         self._remember_path(inode, path)
         return await self.getattr(inode)
 
@@ -264,7 +264,7 @@ class TestFS(pyfuse3.Operations):
             inode = os.lstat(path).st_ino
             os.unlink(path)
         except OSError as exc:
-            raise FUSEError(exc.errno)
+            raise pyfuse3.FUSEError(exc.errno)
         if inode in self._lookup_count:
             self._forget_path(inode, path)
 
