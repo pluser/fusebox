@@ -118,7 +118,7 @@ class TestFS(pyfuse3.Operations):
             if needs.update_gid:
                 chown(pofd, -1, attr.st_gid, follow_symlinks=False)
 
-            if needs.update_atime and fields.update_mtime:
+            if needs.update_atime and needs.update_mtime:
                 # os.utime update both atime and mtime
                 os.utime(pofd, None, ns=(attr.st_atime_ns, attr.st_mtime_ns), follow_symlinks=False)
 
