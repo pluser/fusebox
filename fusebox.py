@@ -131,7 +131,7 @@ class TestFS(pyfuse3.Operations):
                 os.utime(pofd, None, ns=(attr.st_atime_ns, attr.st_mtime_ns), follow_symlinks=False)
 
         except OSError as exc:
-            raise pyfuse3.FUSEError(exc)
+            raise pyfuse3.FUSEError(exc.errno)
 
         return await self.getattr(inode)
 
