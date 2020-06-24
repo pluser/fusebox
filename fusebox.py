@@ -53,6 +53,19 @@ class TestFS(pyfuse3.Operations):
         self._inode_path_map[inode].remove(path)
         if self._inode_path_map[inode]:
             del self._inode_path_map[inode]
+
+    async def statfs(self, ctx):
+        root = self._inode_to_path(pyfuse3.ROOT_INODE)
+        stat_ = pyfuse3.StatvfsData()
+        try:
+            statfs = os.statvfs(root)
+        except OSError as exc:
+            raise pyfuse3.FUSEError(exc.errno)
+        for attr in ('f_bsize', 'f_frsize', 'f_blocks', 'f_bfree', 'f_bavail',
+                     'f_files', 'f_ffree', 'f_favail'):
+            setattr(stat_, attr, getattr(statfs, attr))
+        stat_.f_namemax = statfs.f_namemax - (len(root)+1)
+        return stat_
             
     async def getattr(self, inode, ctx=None):
         if inode in self._inode_fd_map:
