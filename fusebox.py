@@ -188,6 +188,18 @@ class TestFS(pyfuse3.Operations):
             raise pyfuse3.FUSEError(exc.errno)
         return os.fsencode(target)
 
+    async def forget(self, inode_list):
+        for (inode, nlookup) in inode_list:
+            if self._lookup_count[inode] > nlookup:
+                self._lookup_count[inode] -= nlookup
+                continue
+            assert inode not in self._inode_fd_map
+            del self._lookup_count[inode]
+            try:
+                del self._inode_path_map[inode]
+            except KeyError: # may have been deleted
+                pass
+
     async def lookup(self, inode_parent, name, ctx=None):
         name_dec = os.fsdecode(name)
         path = os.path.join(self._inode_to_path(inode_parent), name_dec)
