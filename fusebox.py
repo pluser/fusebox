@@ -135,6 +135,38 @@ class TestFS(pyfuse3.Operations):
 
         return await self.getattr(inode)
 
+    async def getxattr(self, inode, name_encd, ctx):
+        name = os.fsdecode(name_encd)
+        path = self._inode_to_path(inode)
+        try:
+            return os.getxattr(path, name)
+        except OSError as exc:
+            raise pyfuse3.FUSEError(exc.errno)
+
+    async def setxattr(self, inode, name_enced, value_enced, ctx):
+        name = os.fsdecode(name_enced)
+        path = self._inode_to_path(inode)
+        try:
+            os.setxattr(path, name, value_enced)
+        except OSError as exc:
+            raise pyfuse3.FUSEError(exc.errno)
+
+    async def removexattr(self, inode, name_enced, ctx):
+        name = os.fsdecode(name_enced)
+        path = self._inode_to_path(inode)
+        try:
+            os.removexattr(path, name)
+        except OSError as exc:
+            raise pyfuse3.FUSEError(exc.errno)
+
+    async def listxattr(self, inode, ctx):
+        path = self._inode_to_path(inode)
+        try:
+            xattrs = os.listxattr(path)
+        except OSError as exc:
+            raise pyfuse3.FUSEError(exc.errno)
+        return list(map(os.fsencode, xattrs))
+
     async def readlink(self, inode, ctx):
         path = self._inode_to_path(inode)
         try:
