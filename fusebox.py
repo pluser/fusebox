@@ -260,7 +260,7 @@ class TestFS(pyfuse3.Operations):
     async def create(self, inode_parent, name, mode, flags, ctx):
         path = os.path.join(self._inode_to_path(inode_parent), os.fsdecode(name))
         try:
-            fd = os.open(path, flags | os.O_CREAT | os.O_TRUNC)
+            fd = os.open(path, flags | os.O_CREAT | os.O_TRUNC, mode)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
         attr = self._getattr(fd=fd)
