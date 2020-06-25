@@ -204,6 +204,7 @@ class TestFS(pyfuse3.Operations):
         name_dec = os.fsdecode(name)
         path = os.path.join(self._inode_to_path(inode_parent), name_dec)
         attr = self._getattr(path=path)
+        logger.debug("lookup called with path: {}".format(path))
         if name_dec != '.' and name_dec != '..':
             self._remember_path(attr.st_ino, path)
         return attr
@@ -220,6 +221,7 @@ class TestFS(pyfuse3.Operations):
             attr = self._getattr(path=os.path.join(path, name))
             entries.append((attr.st_ino, name, attr))
 
+        logger.debug('read %d entries, starting at %d', len(entries), offset)
         # FIXME: result is break if entries is changed between two calls to readdir()
         for (ino, name, attr) in sorted(entries):
             if ino <= offset:
