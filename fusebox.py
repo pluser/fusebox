@@ -51,7 +51,7 @@ class TestFS(pyfuse3.Operations):
 
     def _forget_path(self, inode, path):
         self._inode_path_map[inode].remove(path)
-        if self._inode_path_map[inode]:
+        if len(self._inode_path_map[inode]) == 0:
             del self._inode_path_map[inode]
 
     async def statfs(self, ctx):
