@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 import argparse
 
 class TestFS(pyfuse3.Operations):
+
+    enable_writeback_cache = False
+
     def __init__(self, path_source):
         super().__init__()
         self._inode_path_map = defaultdict(set)
