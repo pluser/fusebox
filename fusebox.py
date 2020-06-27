@@ -326,8 +326,9 @@ class TestFS(pyfuse3.Operations):
         if inode not in self._lookup_count:
             return
 
-        self._remember_path(inode, path_new)
-        self._forget_path(inode, path_old)
+        # don't increase / decrease lookup count
+        self._inode_path_map[inode].add(path_new)
+        self._inode_path_map[inode].remove(path_old)
 
     async def link(self, inode, new_inode_parent, new_name_enced, ctx):
         new_name = os.fsdecode(new_name_enced)
