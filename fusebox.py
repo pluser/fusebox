@@ -230,10 +230,11 @@ class TestFS(pyfuse3.Operations):
             if ino <= offset:
                 continue
             want_next_entry = pyfuse3.readdir_reply(token, os.fsencode(name), attr, ino)
-            self._remember_path(ino, os.path.join(path, name))
             logger.debug('readdir called: {}'.format(os.path.join(path, name)))
             if not want_next_entry:
                 break
+            # Don't count up lookup_count if want_next_entry == False
+            self._remember_path(ino, os.path.join(path, name))
 
     async def mkdir(self, inode_parent, name, mode, ctx):
         path = os.path.join(self._inode_to_path(inode_parent), os.fsdecode(name))
