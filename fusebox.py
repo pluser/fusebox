@@ -350,7 +350,7 @@ class TestFS(pyfuse3.Operations):
             os.unlink(path)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
-        if inode in self._lookup_count:
+        if inode in self._inode_path_map:
             self._forget_path(inode, path)
 
     async def symlink(self, inode_parent, source_enced, target_enced, ctx):
