@@ -7,6 +7,7 @@ fusebox.py - Entry point of FUSE-powered sandbox system
 from collections import defaultdict
 import os
 import sys
+import errno
 import stat
 import pyfuse3
 import trio
@@ -41,16 +42,31 @@ class TestFS(pyfuse3.Operations):
         else:
             raise pyfuse3.FUSEError(errno.ENOENT)
 
-        path = next(iter(path_set)) # FIXME: not good handling for hardlinks
-        return path
+        # FIXME: not good handling for hardlinks
+        # inode_path_map entry may be invalid because parent dir was renamed.
+        # We have to check it and clean up if file path is queryed.
+        for p in path_set.copy():
+            if not os.path.exists(p):
+                path_set.remove(p)
+                continue
+            return p
+        else:
+            raise pyfuse3.FUSEError(errno.ENOENT)
 
     def _remember_path(self, inode, path):
         if inode == 1:
             logger.warn('remember_path called with inode:{}, path:{}'.format(inode, path))
             return
+        path_set = self._inode_path_map[inode]
+
+        # if parent directory was renamed, existing entry may be invalid.
+        # So we have to check.
+        for p in path_set.copy():
+            if not os.path.exists(p):
+                path_set.remove(p)
+
         self._lookup_count[inode] += 1
-        self._inode_path_map[inode].add(path)
-        return
+        path_set.add(path)
 
     def _forget_path(self, inode, path):
         self._inode_path_map[inode].remove(path)
