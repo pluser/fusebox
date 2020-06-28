@@ -323,7 +323,7 @@ class TestFS(pyfuse3.Operations):
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
 
-        if inode not in self._lookup_count:
+        if inode not in self._inode_path_map:
             return
 
         # don't increase / decrease lookup count
