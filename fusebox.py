@@ -37,9 +37,9 @@ class TestFS(pyfuse3.Operations):
         self._src_device = stat_source.st_dev
 
     def _inode_to_path(self, inode):
-        if inode in self._inode_path_map:
+        try:
             path_set = self._inode_path_map[inode]
-        else:
+        except KeyError:
             raise pyfuse3.FUSEError(errno.ENOENT)
 
         # FIXME: not good handling for hardlinks
