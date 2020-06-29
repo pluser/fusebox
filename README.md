@@ -10,7 +10,14 @@ The sandbox currently used in the Portage package system hooks up writes to the 
 
 1. Mount rootfs to arbitary mountpoint.
 `python fusebox.py --debug / /tmp/arbitary_mp`
-1. chroot to that point
+1. In another terminal, chroot to that directory
 `chroot /tmp/arbitary_mp /bin/bash`
-1. run emerge
-`emerge -a something`
+1. Download GNU hello
+`curl -O http://ftp.gnu.org/gnu/hello/hello-2.10.tar.gz`
+1. Extract gzip file
+`tar xvf hello-2.10.tar.gz`
+1. cd and make binary (and install?)
+`cd hello`
+`./configure`
+`make`
+`make install`
