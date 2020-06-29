@@ -32,3 +32,6 @@ The sandbox currently used in the Portage package system hooks up writes to the 
 `./configure`
 `make`
 `make install`
+1. cleanup
+`umount -l ${MOUNTPOINT}/{proc,sys,dev,tmp}`
+`fusemount ${MOUNTPOINT}` 
