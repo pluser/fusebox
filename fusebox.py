@@ -17,7 +17,9 @@ import faulthandler
 faulthandler.enable()
 
 import logging
-logger = logging.getLogger(__name__)
+logger_root = logging.getLogger(__name__)
+dbglog = logger_root.getChild('debug')
+acslog = logger_root.getChild('access')
 
 import argparse
 
@@ -55,7 +57,7 @@ class TestFS(pyfuse3.Operations):
 
     def _remember_path(self, inode, path):
         if inode == 1:
-            logger.warn('remember_path called with inode:{}, path:{}'.format(inode, path))
+            dbglog.warn('remember_path called with inode:{}, path:{}'.format(inode, path))
             return
         path_set = self._inode_path_map[inode]
 
@@ -95,7 +97,7 @@ class TestFS(pyfuse3.Operations):
     def _getattr(self, path=None, fd=None):
         assert fd is None or path is None
         assert not(fd is None and path is None)
-        logger.debug('getatter path: {}, fd: {}'.format(path, fd))
+        dbglog.debug('getatter path: {}, fd: {}'.format(path, fd))
         try:
             stat = os.lstat(path) if path else os.fstat(fd)
         except OSError as exc:
@@ -223,12 +225,13 @@ class TestFS(pyfuse3.Operations):
         name_dec = os.fsdecode(name)
         path = os.path.join(self._inode_to_path(inode_parent), name_dec)
         attr = self._getattr(path=path)
-        logger.debug("lookup called with path: {}".format(path))
+        dbglog.debug("lookup called with path: {}".format(path))
         if name_dec != '.' and name_dec != '..':
             self._remember_path(attr.st_ino, path)
         return attr
 
     async def opendir(self, inode, ctx):
+        acslog.info('OPENDIR: {}'.format(self._inode_path_map[inode]))
         return inode
 
     async def readdir(self, inode, offset, token):
@@ -240,13 +243,13 @@ class TestFS(pyfuse3.Operations):
             attr = self._getattr(path=os.path.join(path, name))
             entries.append((attr.st_ino, name, attr))
 
-        logger.debug('read %d entries, starting at %d', len(entries), offset)
+        dbglog.debug('read %d entries, starting at %d', len(entries), offset)
         # FIXME: result is break if entries is changed between two calls to readdir()
         for (ino, name, attr) in sorted(entries):
             if ino <= offset:
                 continue
             want_next_entry = pyfuse3.readdir_reply(token, os.fsencode(name), attr, ino)
-            logger.debug('readdir called: {}'.format(os.path.join(path, name)))
+            dbglog.debug('readdir called: {}'.format(os.path.join(path, name)))
             if not want_next_entry:
                 break
             # Don't count up lookup_count if want_next_entry == False
@@ -262,6 +265,7 @@ class TestFS(pyfuse3.Operations):
         attr = self._getattr(path=path)
         inode = attr.st_ino
         self._remember_path(inode, path)
+        acslog.info('MKDIR: {}'.format(path))
         return attr
 
     async def rmdir(self, inode_parent, name, ctx):
@@ -274,23 +278,27 @@ class TestFS(pyfuse3.Operations):
         inode = attr.st_ino
         if inode in self._lookup_count:
             self._forget_path(inode, path)
+        acslog.info('RMDIR: {}'.format(path))
 
     async def open(self, inode, flags, ctx):
         if inode in self._inode_fd_map:
             fd = self._inode_fd_map[inode]
             self._fd_open_count[fd] += 1
             return pyfuse3.FileInfo(fh=fd)
+        path = self._inode_to_path(inode)
         try:
-            fd = os.open(self._inode_to_path(inode), flags)
+            fd = os.open(path, flags)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
         self._inode_fd_map[inode] = fd
         self._fd_inode_map[fd] = inode
         self._fd_open_count[fd] = 1
+        acslog.info('OPEN: {}'.format(path))
         return pyfuse3.FileInfo(fh=fd)
 
     async def read(self, fd, offset, length):
         os.lseek(fd, offset, os.SEEK_SET)
+        acslog.info('READ: {}'.format(self._inode_path_map[self._fd_inode_map[fd]]))
         return os.read(fd, length)
 
     async def create(self, inode_parent, name, mode, flags, ctx):
@@ -305,10 +313,12 @@ class TestFS(pyfuse3.Operations):
         self._inode_fd_map[inode] = fd
         self._fd_inode_map[fd] = inode
         self._fd_open_count[fd] = 1
+        acslog.info('CREATE: {}'.format(path))
         return pyfuse3.FileInfo(fh=fd), attr
 
     async def write(self, fd, offset, buf):
         os.lseek(fd, offset, os.SEEK_SET)
+        acslog.info('WRITE: {}'.format(self._inode_path_map[self._fd_inode_map[fd]]))
         return os.write(fd, buf)
 
     async def release(self, fd):
@@ -321,6 +331,7 @@ class TestFS(pyfuse3.Operations):
         inode = self._fd_inode_map[fd]
         del self._inode_fd_map[inode]
         del self._fd_inode_map[fd]
+        acslog.info('')
         try:
             os.close(fd)
         except OSError as exc:
@@ -339,9 +350,10 @@ class TestFS(pyfuse3.Operations):
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
 
+        acslog.info('RENAME: {} -> {}'.format(path_old, path_new))
+
         if inode not in self._inode_path_map:
             return
-
         # don't increase / decrease lookup count
         self._inode_path_map[inode].add(path_new)
         self._inode_path_map[inode].remove(path_old)
@@ -355,6 +367,7 @@ class TestFS(pyfuse3.Operations):
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
         self._remember_path(inode, path)
+        acslog.info('LINK: {}'.format(path))
         return await self.getattr(inode)
 
     async def unlink(self, inode_parent, name_enced, ctx):
@@ -368,6 +381,7 @@ class TestFS(pyfuse3.Operations):
             raise pyfuse3.FUSEError(exc.errno)
         if inode in self._inode_path_map:
             self._forget_path(inode, path)
+        acslog.info('UNLINK: {}'.format(path))
 
     async def symlink(self, inode_parent, source_enced, target_enced, ctx):
         source = os.fsdecode(source_enced)
@@ -386,13 +400,13 @@ class TestFS(pyfuse3.Operations):
 
 async def mount_pseudo_fs(mountpoint):
     await trio.sleep(2)
-    logger.debug('mount pseudo fs')
+    dbglog.debug('mount pseudo fs')
     p_proc = subprocess.Popen(['/bin/mount', '-t', 'proc', 'proc', '{}/proc'.format(mountpoint)])
     p_sys = subprocess.Popen(['/bin/mount', '-t', 'sysfs', 'sys', '{}/sys'.format(mountpoint)])
     p_dev = subprocess.Popen(['/bin/mount', '--rbind', '/dev', '{}/dev'.format(mountpoint)])
     p_proc.wait()
     p_sys.wait()
-    logger.debug('complete mount pseudo fs')
+    dbglog.debug('complete mount pseudo fs')
 
 async def start(mountpoint):
     async with trio.open_nursery() as nursery:
@@ -408,24 +422,26 @@ def main():
     args = parser.parse_args()
 
     ### initialize logger ###
-    formatter = logging.Formatter('%(asctime)s.%(msecs)03d %(threadName)s: '
-                                  '[%(name)s] %(message)s', datefmt="%Y-%m-%d %H:%M:%S")
-    handler = logging.StreamHandler()
-    handler.setFormatter(formatter)
-    root_logger = logging.getLogger()
+    dbglogformatter = logging.Formatter()
+    dbgloghandler = logging.StreamHandler()
+    dbgloghandler.setFormatter(dbglogformatter)
+    dbglog.addHandler(dbgloghandler)
     if args.debug:
-        handler.setLevel(logging.DEBUG)
-        root_logger.setLevel(logging.DEBUG)
+        dbglog.setLevel(logging.DEBUG)
     else:
-        handler.setLevel(logging.INFO)
-        root_logger.setLevel(logging.INFO)
-    root_logger.addHandler(handler)
+        dbglog.setLevel(logging.INFO)
+    acslog.setLevel(logging.INFO)
+    acsformatter = logging.Formatter()
+    acshandler = logging.StreamHandler(sys.stdout)
+    acshandler.setFormatter(acsformatter)
+    acslog.addHandler(acshandler)
 
     ### start filesystem ###
     testfs = TestFS(args.source)
     fuse_options = set(pyfuse3.default_options)
     fuse_options.add('fsname=testfs')
-    fuse_options.add('debug')
+    if args.debug:
+        fuse_options.add('debug')
     fuse_options.add('dev')
     pyfuse3.init(testfs, args.mountpoint, fuse_options)
     try:
