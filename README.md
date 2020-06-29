@@ -14,15 +14,21 @@ The sandbox currently used in the Portage package system hooks up writes to the 
 ## How to Use
 
 1. Mount rootfs to arbitary mountpoint.
-`python fusebox.py --debug / /tmp/arbitary_mp`
-1. In another terminal, chroot to that directory
-`chroot /tmp/arbitary_mp /bin/bash`
+`python fusebox.py / ${MOUNTPOINT}`
+1. In another terminal, mount pseudo filesystems
+`mount -t proc procfs ${MOUNTPOINT}/proc`
+`mount -t sysfs sysfs ${MOUNTPOINT}/sys`
+`mount --rbind /dev ${MOUNTPOINT}/dev`
+`mount --make-rslave ${MOUNTPOINT}/dev`
+`mount -t tmpfs tmpfs ${MOUNTPOINT}/tmp`
+1. chroot to that directory
+`chroot /tmp/${MOUNTPOINT} /bin/bash`
 1. Download GNU hello
 `curl -O http://ftp.gnu.org/gnu/hello/hello-2.10.tar.gz`
 1. Extract gzip file
 `tar xvf hello-2.10.tar.gz`
 1. cd and make binary (and install?)
-`cd hello`
+`cd hello-2.10`
 `./configure`
 `make`
 `make install`
