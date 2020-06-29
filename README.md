@@ -6,7 +6,7 @@ Fusebox is new implementation of sandbox for Portage (package system for Gentoo 
 
 The sandbox currently used in the Portage package system hooks up writes to the file system by using LD_PRELOAD, but this method has a few drawbacks.  This project develops a new sandbox mechanism based on FUSE, while maintaining compatibility.
 
-## Requirments
+## Requirements
 - kernel FUSE support CONFIG_FUSE_FS
 - sys-fs/fuse `emerge sys-fs/fuse`
 - pyfuse `pip install pyfuse3`
@@ -22,7 +22,7 @@ The sandbox currently used in the Portage package system hooks up writes to the 
    - `mount --make-rslave ${MOUNTPOINT}/dev`
    - `mount -t tmpfs tmpfs ${MOUNTPOINT}/tmp`
 1. chroot to that directory
-`chroot /tmp/${MOUNTPOINT} /bin/bash`
+`chroot ${MOUNTPOINT} /bin/bash`
 1. Download GNU hello
 `curl -O http://ftp.gnu.org/gnu/hello/hello-2.10.tar.gz`
 1. Extract gzip file
