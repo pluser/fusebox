@@ -447,10 +447,9 @@ def main():
     try:
         #trio.run(pyfuse3.main)
         trio.run(start, args.mountpoint)
-    except:
+    finally:
         pyfuse3.close(unmount=True)
         sys.exit(0)
-    pyfuse3.close()
 
 
 if __name__ == '__main__':
