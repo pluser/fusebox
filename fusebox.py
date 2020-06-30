@@ -12,6 +12,7 @@ import stat
 import pyfuse3
 import trio
 import subprocess
+import random
 
 import faulthandler
 faulthandler.enable()
@@ -57,7 +58,7 @@ class TestFS(pyfuse3.Operations):
 
     def _remember_path(self, inode, path):
         if inode == 1:
-            dbglog.warn('remember_path called with inode:{}, path:{}'.format(inode, path))
+            dbglog.warn('remember_path called with invalid inode:{}, path:{}'.format(inode, path))
             return
         path_set = self._inode_path_map[inode]
 
@@ -117,10 +118,9 @@ class TestFS(pyfuse3.Operations):
         entry.st_blocks = ((entry.st_size+entry.st_blksize-1) // entry.st_blksize)
 
         # FIXME: fixed inode will be conflict another inode
-        if path == '/proc':
-            entry.st_ino = 2222222
-        if path == '/sys':
-            entry.st_ino = 3333333
+        if entry.st_ino == 1:
+            assert path != '/'
+            entry.st_ino = random.randrange(2_000_000, 3_000_000) 
 
         return entry
 
@@ -449,7 +449,7 @@ def main():
         trio.run(start, args.mountpoint)
     finally:
         pyfuse3.close(unmount=True)
-        sys.exit(0)
+    sys.exit(0)
 
 
 if __name__ == '__main__':
