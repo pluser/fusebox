@@ -448,9 +448,8 @@ def main():
         #trio.run(pyfuse3.main)
         trio.run(start, args.mountpoint)
     except:
-        pyfuse3.close(unmount=False)
-        raise RuntimeError
-
+        pyfuse3.close(unmount=True)
+        sys.exit(0)
     pyfuse3.close()
 
 
