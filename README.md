@@ -35,3 +35,10 @@ The sandbox currently used in the Portage package system hooks up writes to the 
 1. Clean up
    - `umount -l ${MOUNTPOINT}/{proc,sys,dev,tmp}`
    - `fusermount -u ${MOUNTPOINT}` 
+
+## Export to logfile
+1. Please use logfile option.
+`python fusebox.py --logfile=foobar / ${MOUNTPOINT}`
+Fusebox exports three files `foobar.r.txt`, `foobar.w.txt`, `foobar.rw.txt` if mountpoint is unmounted gracefully.
+It contains list of files which was opend as each mode.
+The list is sorted and doesn't have duplicate.

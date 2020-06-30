@@ -38,6 +38,9 @@ class TestFS(pyfuse3.Operations):
         self._fd_inode_map = dict()
         stat_source = os.lstat(path_source)
         self._src_device = stat_source.st_dev
+        self.stat_path_open_r = set()
+        self.stat_path_open_w = set()
+        self.stat_path_open_rw = set()
 
     def _inode_to_path(self, inode):
         try:
@@ -293,6 +296,15 @@ class TestFS(pyfuse3.Operations):
         self._inode_fd_map[inode] = fd
         self._fd_inode_map[fd] = inode
         self._fd_open_count[fd] = 1
+
+        # Record accessed files;
+        if flags & os.O_RDWR:
+            self.stat_path_open_rw.add(path)
+        elif flags & os.O_WRONLY:
+            self.stat_path_open_w.add(path)
+        else:
+            self.stat_path_open_r.add(path)
+
         acslog.info('OPEN: {}'.format(path))
         return pyfuse3.FileInfo(fh=fd)
 
@@ -413,12 +425,25 @@ async def start(mountpoint):
         nursery.start_soon(pyfuse3.main)
         #nursery.start_soon(mount_pseudo_fs, mountpoint)
 
+def export_logfile(fs, basepath):
+    import csv
+    o_r = sorted(list(fs.stat_path_open_r))
+    o_w = sorted(list(fs.stat_path_open_w))
+    o_rw = sorted(list(fs.stat_path_open_rw))
+    with open(basepath + '.r.txt', mode='w', newline='') as fd:
+        csv.writer(fd, delimiter='\n').writerow(o_r)
+    with open(basepath + '.w.txt', mode='w', newline='') as fd:
+        csv.writer(fd, delimiter='\n').writerows(o_w)
+    with open(basepath + '.rw.txt', mode='w', newline='') as fd:
+        csv.writer(fd, delimiter='\n').writerows(o_rw)
+
 def main():
     ### parse command line ###
     parser = argparse.ArgumentParser()
     parser.add_argument('source', type=str)
     parser.add_argument('mountpoint', type=str)
     parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--logfile', type=str)
     args = parser.parse_args()
 
     ### initialize logger ###
@@ -449,6 +474,10 @@ def main():
         trio.run(start, args.mountpoint)
     finally:
         pyfuse3.close(unmount=True)
+
+    if args.logfile:
+        export_logfile(testfs, args.logfile)
+
     sys.exit(0)
 
 
