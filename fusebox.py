@@ -28,8 +28,10 @@ class TestFS(pyfuse3.Operations):
 
     enable_writeback_cache = False
 
-    def __init__(self, path_source):
+    def __init__(self, path_source, path_dest):
         super().__init__()
+        self._path_source = path_source
+        self._path_mountpoint = path_dest
         self._inode_path_map = defaultdict(set)
         self._inode_fd_map = dict()
         self._inode_path_map[pyfuse3.ROOT_INODE].add(path_source)
@@ -41,6 +43,21 @@ class TestFS(pyfuse3.Operations):
         self.stat_path_open_r = set()
         self.stat_path_open_w = set()
         self.stat_path_open_rw = set()
+
+    def _redirect_path(self, path):
+        abspath = os.path.abspath
+        join = os.path.join
+        relpath = os.path.relpath
+        dirname = os.path.dirname
+        # To avoid self-reference, check the path and redirect access to source
+        pmp = abspath(self._path_mountpoint)
+        #if path == join(pmp, relpath(dirname(pmp), start='/')):
+        if path == self._path_mountpoint:
+            # i.e. if mountpoint is /A/B, then path is /A/B/A
+            # i.e. if mountpoint is /A/B/C, then path is /A/B/C/A/B
+            #path = dirname(pmp)
+            path = self._path_source
+        return path
 
     def _inode_to_path(self, inode):
         try:
@@ -72,6 +89,7 @@ class TestFS(pyfuse3.Operations):
                 path_set.remove(p)
 
         self._lookup_count[inode] += 1
+        path = self._redirect_path(path)
         path_set.add(path)
 
     def _forget_path(self, inode, path):
@@ -101,12 +119,13 @@ class TestFS(pyfuse3.Operations):
     def _getattr(self, path=None, fd=None):
         assert fd is None or path is None
         assert not(fd is None and path is None)
+
         dbglog.debug('getatter path: {}, fd: {}'.format(path, fd))
+        path = self._redirect_path(path)
         try:
             stat = os.lstat(path) if path else os.fstat(fd)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
-
 
         entry = pyfuse3.EntryAttributes()
         # copy attrs from base FS.
@@ -121,9 +140,8 @@ class TestFS(pyfuse3.Operations):
         entry.st_blocks = ((entry.st_size+entry.st_blksize-1) // entry.st_blksize)
 
         # FIXME: fixed inode will be conflict another inode
-        if entry.st_ino == 1:
-            assert path != '/'
-            entry.st_ino = random.randrange(2_000_000, 3_000_000) 
+        if entry.st_ino == 1 and path != '/':
+            entry.st_ino = random.randrange(2_000_000, 3_000_000)
 
         return entry
 
@@ -220,6 +238,7 @@ class TestFS(pyfuse3.Operations):
     async def lookup(self, inode_parent, name, ctx=None):
         name_dec = os.fsdecode(name)
         path = os.path.join(self._inode_to_path(inode_parent), name_dec)
+        path = self._redirect_path(path)
         attr = self._getattr(path=path)
         dbglog.debug("lookup called with path: {}".format(path))
         if name_dec != '.' and name_dec != '..':
@@ -233,7 +252,7 @@ class TestFS(pyfuse3.Operations):
     async def readdir(self, inode, offset, token):
         path = self._inode_to_path(inode)
         entries = list()
-        for name in os.listdir(path):
+        for name in pyfuse3.listdir(path):
             if name == '.' or name == '..':
                 continue
             attr = self._getattr(path=os.path.join(path, name))
@@ -455,7 +474,7 @@ def main():
     acslog.addHandler(acshandler)
 
     ### start filesystem ###
-    testfs = TestFS(args.source)
+    testfs = TestFS(args.source, args.mountpoint)
     fuse_options = set(pyfuse3.default_options)
     fuse_options.add('fsname=testfs')
     if args.debug:
