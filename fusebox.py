@@ -142,27 +142,20 @@ class TestFS(pyfuse3.Operations):
             fstat = os.fstat
 
         try:
-
             if needs.update_size:
                 trunc(pofd, attr.st_size)
-
             if needs.update_mode:
                 chmod(pofd, stat.S_IMODE(attr.st_mode))
-
             if needs.update_uid:
                 chown(pofd, attr.st_uid, -1, follow_symlinks=False)
-
             if needs.update_gid:
                 chown(pofd, -1, attr.st_gid, follow_symlinks=False)
-
             if needs.update_atime and needs.update_mtime:
                 # os.utime update both atime and mtime
                 os.utime(pofd, None, ns=(attr.st_atime_ns, attr.st_mtime_ns), follow_symlinks=False)
-
             elif needs.update_atime:
                 attr.st_mtime_ns = fstat(pofd).st_mtime_ns
                 os.utime(pofd, None, ns=(attr.st_atime_ns, attr.st_mtime_ns), follow_symlinks=False)
-
             elif needs.update_mtime:
                 attr.st_atime_ns = fstat(pofd).st_atime_ns
                 os.utime(pofd, None, ns=(attr.st_atime_ns, attr.st_mtime_ns), follow_symlinks=False)
