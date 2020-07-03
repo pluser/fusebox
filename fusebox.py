@@ -44,21 +44,6 @@ class TestFS(pyfuse3.Operations):
         self.stat_path_open_w = set()
         self.stat_path_open_rw = set()
 
-    def _redirect_path(self, path):
-        abspath = os.path.abspath
-        join = os.path.join
-        relpath = os.path.relpath
-        dirname = os.path.dirname
-        # To avoid self-reference, check the path and redirect access to source
-        pmp = abspath(self._path_mountpoint)
-        #if path == join(pmp, relpath(dirname(pmp), start='/')):
-        if path == self._path_mountpoint:
-            # i.e. if mountpoint is /A/B, then path is /A/B/A
-            # i.e. if mountpoint is /A/B/C, then path is /A/B/C/A/B
-            #path = dirname(pmp)
-            path = self._path_source
-        return path
-
     def _inode_to_path(self, inode):
         try:
             path_set = self._inode_path_map[inode]
@@ -89,7 +74,6 @@ class TestFS(pyfuse3.Operations):
                 path_set.remove(p)
 
         self._lookup_count[inode] += 1
-        path = self._redirect_path(path)
         path_set.add(path)
 
     def _forget_path(self, inode, path):
@@ -121,7 +105,8 @@ class TestFS(pyfuse3.Operations):
         assert not(fd is None and path is None)
 
         dbglog.debug('getatter path: {}, fd: {}'.format(path, fd))
-        path = self._redirect_path(path)
+        if path == self._path_mountpoint:
+            raise pyfuse3.FUSEError(errno.ENOENT)
         try:
             stat = os.lstat(path) if path else os.fstat(fd)
         except OSError as exc:
@@ -238,7 +223,6 @@ class TestFS(pyfuse3.Operations):
     async def lookup(self, inode_parent, name, ctx=None):
         name_dec = os.fsdecode(name)
         path = os.path.join(self._inode_to_path(inode_parent), name_dec)
-        path = self._redirect_path(path)
         attr = self._getattr(path=path)
         dbglog.debug("lookup called with path: {}".format(path))
         if name_dec != '.' and name_dec != '..':
@@ -254,6 +238,8 @@ class TestFS(pyfuse3.Operations):
         entries = list()
         for name in pyfuse3.listdir(path):
             if name == '.' or name == '..':
+                continue
+            if os.path.join(path, name) == self._path_mountpoint:
                 continue
             attr = self._getattr(path=os.path.join(path, name))
             entries.append((attr.st_ino, name, attr))
