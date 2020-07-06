@@ -13,16 +13,16 @@ import pyfuse3
 import trio
 import subprocess
 import random
-
+import logging
+import argparse
 import faulthandler
+
 faulthandler.enable()
 
-import logging
 logger_root = logging.getLogger(__name__)
 dbglog = logger_root.getChild('debug')
 acslog = logger_root.getChild('access')
 
-import argparse
 
 class TestFS(pyfuse3.Operations):
 
@@ -93,7 +93,7 @@ class TestFS(pyfuse3.Operations):
             setattr(stat_, attr, getattr(statfs, attr))
         stat_.f_namemax = statfs.f_namemax - (len(root)+1)
         return stat_
-            
+
     async def getattr(self, inode, ctx=None):
         if inode in self._inode_fd_map:
             return self._getattr(fd=self._inode_fd_map[inode])
@@ -217,7 +217,7 @@ class TestFS(pyfuse3.Operations):
             del self._lookup_count[inode]
             try:
                 del self._inode_path_map[inode]
-            except KeyError: # may have been deleted
+            except KeyError:  # may have been deleted
                 pass
 
     async def lookup(self, inode_parent, name, ctx=None):
@@ -413,15 +413,16 @@ async def mount_pseudo_fs(mountpoint):
     dbglog.debug('mount pseudo fs')
     p_proc = subprocess.Popen(['/bin/mount', '-t', 'proc', 'proc', '{}/proc'.format(mountpoint)])
     p_sys = subprocess.Popen(['/bin/mount', '-t', 'sysfs', 'sys', '{}/sys'.format(mountpoint)])
-    p_dev = subprocess.Popen(['/bin/mount', '--rbind', '/dev', '{}/dev'.format(mountpoint)])
     p_proc.wait()
     p_sys.wait()
     dbglog.debug('complete mount pseudo fs')
 
+
 async def start(mountpoint):
     async with trio.open_nursery() as nursery:
         nursery.start_soon(pyfuse3.main)
-        #nursery.start_soon(mount_pseudo_fs, mountpoint)
+        # nursery.start_soon(mount_pseudo_fs, mountpoint)
+
 
 def export_logfile(fs, basepath):
     import csv
@@ -435,8 +436,9 @@ def export_logfile(fs, basepath):
     with open(basepath + '.rw.txt', mode='w', newline='') as fd:
         csv.writer(fd, delimiter='\n').writerows(o_rw)
 
+
 def main():
-    ### parse command line ###
+    # parse command line ###
     parser = argparse.ArgumentParser()
     parser.add_argument('source', type=str)
     parser.add_argument('mountpoint', type=str)
@@ -444,7 +446,7 @@ def main():
     parser.add_argument('--logfile', type=str)
     args = parser.parse_args()
 
-    ### initialize logger ###
+    # initialize logger ###
     dbglogformatter = logging.Formatter()
     dbgloghandler = logging.StreamHandler()
     dbgloghandler.setFormatter(dbglogformatter)
@@ -459,7 +461,7 @@ def main():
     acshandler.setFormatter(acsformatter)
     acslog.addHandler(acshandler)
 
-    ### start filesystem ###
+    # start filesystem ###
     testfs = TestFS(args.source, args.mountpoint)
     fuse_options = set(pyfuse3.default_options)
     fuse_options.add('fsname=testfs')
@@ -468,7 +470,7 @@ def main():
     fuse_options.add('dev')
     pyfuse3.init(testfs, args.mountpoint, fuse_options)
     try:
-        #trio.run(pyfuse3.main)
+        # trio.run(pyfuse3.main)
         trio.run(start, args.mountpoint)
     finally:
         pyfuse3.close(unmount=True)
