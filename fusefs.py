@@ -1,21 +1,17 @@
-from collections import defaultdict
 import os
-import sys
 import errno
 import stat
 import pyfuse3
-import trio
-import subprocess
-import random
 import logging
-import argparse
 import faulthandler
+from vnode import VnodeManager
 
 faulthandler.enable()
 
 _logger_root = logging.getLogger('Fusebox')
-_dbglog = _logger_root.getChild('debug')
+_opslog = _logger_root.getChild('operation')
 _acslog = _logger_root.getChild('access')
+
 
 class Fusebox(pyfuse3.Operations):
 
@@ -23,59 +19,18 @@ class Fusebox(pyfuse3.Operations):
 
     def __init__(self, path_source, path_dest):
         super().__init__()
-        self._path_source = path_source
-        self._path_mountpoint = path_dest
-        self._inode_path_map = defaultdict(set)
-        self._inode_fd_map = dict()
-        self._inode_path_map[pyfuse3.ROOT_INODE].add(path_source)
-        self._lookup_count = defaultdict(int)
-        self._fd_open_count = defaultdict(int)
-        self._fd_inode_map = dict()
+        self.vm = VnodeManager(path_source)
+        self._path_source = os.path.abspath(path_source)
+        self._path_mountpoint = os.path.abspath(path_dest)
         stat_source = os.lstat(path_source)
         self._src_device = stat_source.st_dev
         self.stat_path_open_r = set()
         self.stat_path_open_w = set()
         self.stat_path_open_rw = set()
 
-    def _inode_to_path(self, inode):
-        try:
-            path_set = self._inode_path_map[inode]
-        except KeyError:
-            raise pyfuse3.FUSEError(errno.ENOENT)
-
-        # FIXME: not good handling for hardlinks
-        # inode_path_map entry may be invalid because parent dir was renamed.
-        # We have to check it and clean up if file path is queryed.
-        for p in path_set.copy():
-            if not os.path.exists(p):
-                path_set.remove(p)
-                continue
-            return p
-        else:
-            raise pyfuse3.FUSEError(errno.ENOENT)
-
-    def _remember_path(self, inode, path):
-        if inode == 1:
-            _dbglog.warn('remember_path called with invalid inode:{}, path:{}'.format(inode, path))
-            return
-        path_set = self._inode_path_map[inode]
-
-        # if parent directory was renamed, existing entry may be invalid.
-        # So we have to check.
-        for p in path_set.copy():
-            if not os.path.exists(p):
-                path_set.remove(p)
-
-        self._lookup_count[inode] += 1
-        path_set.add(path)
-
-    def _forget_path(self, inode, path):
-        self._inode_path_map[inode].remove(path)
-        if len(self._inode_path_map[inode]) == 0:
-            del self._inode_path_map[inode]
-
+    # noinspection PyUnusedLocal
     async def statfs(self, ctx):
-        root = self._inode_to_path(pyfuse3.ROOT_INODE)
+        root = self.vm[pyfuse3.ROOT_INODE].path
         stat_ = pyfuse3.StatvfsData()
         try:
             statfs = os.statvfs(root)
@@ -87,45 +42,35 @@ class Fusebox(pyfuse3.Operations):
         stat_.f_namemax = statfs.f_namemax - (len(root)+1)
         return stat_
 
-    async def getattr(self, inode, ctx=None):
-        if inode in self._inode_fd_map:
-            return self._getattr(fd=self._inode_fd_map[inode])
-        else:
-            return self._getattr(path=self._inode_to_path(inode))
+    async def getattr(self, vnode, ctx=None):
+        return self._getattr(self.vm[vnode])
 
-    def _getattr(self, path=None, fd=None):
-        assert fd is None or path is None
-        assert not(fd is None and path is None)
-
-        _dbglog.debug('getatter path: {}, fd: {}'.format(path, fd))
-        if path == self._path_mountpoint:
+    def _getattr(self, vinfo):
+        _opslog.debug('getattr path: {}, fd: {}'.format(vinfo.path, vinfo.fd))
+        if self._path_mountpoint in vinfo.paths:
             raise pyfuse3.FUSEError(errno.ENOENT)
         try:
-            stat = os.lstat(path) if path else os.fstat(fd)
+            stat_ = os.lstat(vinfo.path)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
 
         entry = pyfuse3.EntryAttributes()
         # copy attrs from base FS.
-        for attr in ('st_ino', 'st_mode', 'st_nlink', 'st_uid', 'st_gid',
-                     'st_rdev', 'st_size', 'st_atime_ns', 'st_mtime_ns',
-                     'st_ctime_ns'):
-            setattr(entry, attr, getattr(stat, attr))
+        for attr in ('st_mode', 'st_nlink', 'st_uid', 'st_gid', 'st_rdev',
+                     'st_size', 'st_atime_ns', 'st_mtime_ns', 'st_ctime_ns'):
+            setattr(entry, attr, getattr(stat_, attr))
+        entry.st_ino = vinfo.vnode
         entry.generation = 0
         entry.entry_timeout = 0
         entry.attr_timeout = 0
         entry.st_blksize = 512
         entry.st_blocks = ((entry.st_size+entry.st_blksize-1) // entry.st_blksize)
 
-        # FIXME: fixed inode will be conflict another inode
-        if entry.st_ino == 1 and path != '/':
-            entry.st_ino = random.randrange(2_000_000, 3_000_000)
-
         return entry
 
-    async def setattr(self, inode, attr, needs, fd, ctx):
+    async def setattr(self, vnode, attr, needs, fd, ctx):
         if fd is None:
-            pofd = self._inode_to_path(inode)
+            pofd = self.vm[vnode].path
             trunc = os.truncate
             chmod = os.chmod
             chown = os.chown
@@ -159,144 +104,127 @@ class Fusebox(pyfuse3.Operations):
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
 
-        return await self.getattr(inode)
+        return await self.getattr(vnode)
 
-    async def getxattr(self, inode, name_encd, ctx):
-        name = os.fsdecode(name_encd)
-        path = self._inode_to_path(inode)
+    async def getxattr(self, vnode, name_enced, ctx):
+        name = os.fsdecode(name_enced)
+        path = self.vm[vnode].path
         try:
             return os.getxattr(path, name)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
 
-    async def setxattr(self, inode, name_enced, value_enced, ctx):
+    async def setxattr(self, vnode, name_enced, value_enced, ctx):
         name = os.fsdecode(name_enced)
-        path = self._inode_to_path(inode)
+        path = self.vm[vnode].path
         try:
             os.setxattr(path, name, value_enced)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
 
-    async def removexattr(self, inode, name_enced, ctx):
+    async def removexattr(self, vnode, name_enced, ctx):
         name = os.fsdecode(name_enced)
-        path = self._inode_to_path(inode)
+        path = self.vm[vnode].path
         try:
             os.removexattr(path, name)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
 
-    async def listxattr(self, inode, ctx):
-        path = self._inode_to_path(inode)
+    async def listxattr(self, vnode, ctx):
+        path = self.vm[vnode].path
         try:
             xattrs = os.listxattr(path)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
         return list(map(os.fsencode, xattrs))
 
-    async def readlink(self, inode, ctx):
-        path = self._inode_to_path(inode)
+    async def readlink(self, vnode, ctx):
+        path = self.vm[vnode].path
         try:
             target = os.readlink(path)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
         return os.fsencode(target)
 
-    async def forget(self, inode_list):
-        for (inode, nlookup) in inode_list:
-            if self._lookup_count[inode] > nlookup:
-                self._lookup_count[inode] -= nlookup
-                continue
-            assert inode not in self._inode_fd_map
-            del self._lookup_count[inode]
-            try:
-                del self._inode_path_map[inode]
-            except KeyError:  # may have been deleted
-                pass
+    async def forget(self, vnode_list):
+        for (vnode, nlookup) in vnode_list:
+            self.vm[vnode].forget_reference(nlookup)
 
-    async def lookup(self, inode_parent, name, ctx=None):
-        name_dec = os.fsdecode(name)
-        path = os.path.join(self._inode_to_path(inode_parent), name_dec)
-        attr = self._getattr(path=path)
-        _dbglog.debug("lookup called with path: {}".format(path))
-        if name_dec != '.' and name_dec != '..':
-            self._remember_path(attr.st_ino, path)
-        return attr
+    async def lookup(self, vnode_parent, name_enced, ctx=None):
+        name = os.fsdecode(name_enced)
+        path = self.vm.make_path(self.vm[vnode_parent].path, name)
+        try:
+            vinfo = self.vm[path]
+        except KeyError:
+            vinfo = self.vm.create_vinfo()
+        _opslog.debug("lookup called with path: {}".format(path))
+        if name != '.' and name != '..':
+            vinfo.add_path(path)
+        return self._getattr(vinfo)
 
-    async def opendir(self, inode, ctx):
-        _acslog.info('OPENDIR: {}'.format(self._inode_path_map[inode]))
-        return inode
+    async def opendir(self, vnode, ctx):
+        _acslog.info('OPENDIR: {}'.format(self.vm[vnode].paths))
+        return vnode
 
-    async def readdir(self, inode, offset, token):
-        path = self._inode_to_path(inode)
+    async def readdir(self, vnode, offset, token):
+        p_vinfo = self.vm[vnode]
         entries = list()
-        for name in pyfuse3.listdir(path):
+        _opslog.debug('readdir called: {}'.format(p_vinfo.path))
+        for name in pyfuse3.listdir(p_vinfo.path):
             if name == '.' or name == '..':
                 continue
-            if os.path.join(path, name) == self._path_mountpoint:
+            if os.path.join(p_vinfo.path, name) == self._path_mountpoint:  # FIXME: handle hardlinks
                 continue
-            attr = self._getattr(path=os.path.join(path, name))
+            attr = os.lstat(self.vm.make_path(p_vinfo.path, name))
             entries.append((attr.st_ino, name, attr))
 
-        _dbglog.debug('read %d entries, starting at %d', len(entries), offset)
+        _opslog.debug('read %d entries, starting at %d', len(entries), offset)
         # FIXME: result is break if entries is changed between two calls to readdir()
         for (ino, name, attr) in sorted(entries):
             if ino <= offset:
                 continue
             want_next_entry = pyfuse3.readdir_reply(token, os.fsencode(name), attr, ino)
-            _dbglog.debug('readdir called: {}'.format(os.path.join(path, name)))
             if not want_next_entry:
                 break
             # Don't count up lookup_count if want_next_entry == False
-            self._remember_path(ino, os.path.join(path, name))
+            c_vinfo = self.vm.create_vinfo()
+            c_path = self.vm.make_path(p_vinfo.path, name)
+            c_vinfo.add_path(c_path)
 
-    async def mkdir(self, inode_parent, name, mode, ctx):
-        path = os.path.join(self._inode_to_path(inode_parent), os.fsdecode(name))
+    async def mkdir(self, vnode_parent, name, mode, ctx):
+        path = self.vm.make_path(self.vm[vnode_parent].path, os.fsdecode(name))
         try:
             os.mkdir(path, mode=(mode & ~ctx.umask))
             os.chown(path, ctx.uid, ctx.gid)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
-        attr = self._getattr(path=path)
-        inode = attr.st_ino
-        self._remember_path(inode, path)
+        vinfo_c = self.vm.create_vinfo()
+        vinfo_c.add_path(path)
         _acslog.info('MKDIR: {}'.format(path))
-        return attr
+        return self._getattr(vinfo_c)
 
-    async def rmdir(self, inode_parent, name, ctx):
-        path = os.path.join(self._inode_to_path(inode_parent), os.fsdecode(name))
+    async def rmdir(self, vnode_parent, name, ctx):
+        path = self.vm.make_path(self.vm[vnode_parent].path, os.fsdecode(name))
+        vinfo = self.vm[path]
         try:
-            attr = os.lstat(path)
             os.rmdir(path)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
-        inode = attr.st_ino
-        if inode in self._lookup_count:
-            self._forget_path(inode, path)
+        vinfo.remove_path(path)
         _acslog.info('RMDIR: {}'.format(path))
 
-    async def open(self, inode, flags, ctx):
-        if inode in self._inode_fd_map:
-            fd = self._inode_fd_map[inode]
-            self._fd_open_count[fd] += 1
-            return pyfuse3.FileInfo(fh=fd)
-        path = self._inode_to_path(inode)
-        try:
-            fd = os.open(path, flags)
-        except OSError as exc:
-            raise pyfuse3.FUSEError(exc.errno)
-        self._inode_fd_map[inode] = fd
-        self._fd_inode_map[fd] = inode
-        self._fd_open_count[fd] = 1
-
+    async def open(self, vnode, flags, ctx):
+        vinfo = self.vm[vnode]
+        fd = vinfo.open_vnode(flags)
         # Record accessed files;
         if flags & os.O_RDWR:
-            self.stat_path_open_rw.add(path)
+            self.stat_path_open_rw.add(vinfo.path)
         elif flags & os.O_WRONLY:
-            self.stat_path_open_w.add(path)
+            self.stat_path_open_w.add(vinfo.path)
         else:
-            self.stat_path_open_r.add(path)
+            self.stat_path_open_r.add(vinfo.path)
 
-        _acslog.info('OPEN: {}'.format(path))
+        _acslog.info('OPEN: {}'.format(vinfo.path))
         return pyfuse3.FileInfo(fh=fd)
 
     async def read(self, fd, offset, length):
@@ -304,20 +232,13 @@ class Fusebox(pyfuse3.Operations):
         _acslog.info('READ: {}'.format(self._inode_path_map[self._fd_inode_map[fd]]))
         return os.read(fd, length)
 
-    async def create(self, inode_parent, name, mode, flags, ctx):
-        path = os.path.join(self._inode_to_path(inode_parent), os.fsdecode(name))
-        try:
-            fd = os.open(path, flags | os.O_CREAT | os.O_TRUNC, mode)
-        except OSError as exc:
-            raise pyfuse3.FUSEError(exc.errno)
-        attr = self._getattr(fd=fd)
-        inode = attr.st_ino
-        self._remember_path(inode, path)
-        self._inode_fd_map[inode] = fd
-        self._fd_inode_map[fd] = inode
-        self._fd_open_count[fd] = 1
+    async def create(self, vnode_parent, name, mode, flags, ctx):
+        path = self.vm.make_path(self.vm[vnode_parent].path, os.fsdecode(name))
+        vinfo = self.vm.create_vinfo()
+        vinfo.add_path(path)
+        fd = vinfo.open_vnode(flags | os.O_CREAT | os.O_TRUNC, mode)
         _acslog.info('CREATE: {}'.format(path))
-        return pyfuse3.FileInfo(fh=fd), attr
+        return pyfuse3.FileInfo(fh=fd), self._getattr(vinfo)
 
     async def write(self, fd, offset, buf):
         os.lseek(fd, offset, os.SEEK_SET)
@@ -325,77 +246,62 @@ class Fusebox(pyfuse3.Operations):
         return os.write(fd, buf)
 
     async def release(self, fd):
-        if self._fd_open_count[fd] > 1:
-            self._fd_open_count[fd] -= 1
-            return
+        fd = os.fdopen(fd)
+        path = self.vm.make_path(fd.name)
+        self.vm[path].close_vnode()
 
-        assert self._fd_open_count[fd] == 1
-        del self._fd_open_count[fd]
-        inode = self._fd_inode_map[fd]
-        del self._inode_fd_map[inode]
-        del self._fd_inode_map[fd]
-        _acslog.info('')
-        try:
-            os.close(fd)
-        except OSError as exc:
-            raise pyfuse3.FUSEError(exc.errno)
-
-    async def rename(self, inode_old_parent, name_old_enced, inode_new_parent, name_new_enced, flags, ctx):
+    async def rename(self, vnode_old_parent, name_old_enced, vnode_new_parent, name_new_enced, flags, ctx):
         name_old = os.fsdecode(name_old_enced)
         name_new = os.fsdecode(name_new_enced)
-        parent_old = self._inode_to_path(inode_old_parent)
-        parent_new = self._inode_to_path(inode_new_parent)
-        path_old = os.path.join(parent_old, name_old)
-        path_new = os.path.join(parent_new, name_new)
+        vinfo_old_p = self.vm[vnode_old_parent]
+        vinfo_new_p = self.vm[vnode_new_parent]
+        path_old = self.vm.make_path(vinfo_old_p.path, name_old)
+        path_new = self.vm.make_path(vinfo_new_p.path, name_new)
         try:
             os.rename(path_old, path_new)
-            inode = os.lstat(path_new).st_ino
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
-
         _acslog.info('RENAME: {} -> {}'.format(path_old, path_new))
+        if path_old in self.vm:
+            vinfo = self.vm[path_old]
+            vinfo.add_path(path_new, inc_ref=False)
+            vinfo.remove_path(path_old)
 
-        if inode not in self._inode_path_map:
-            return
-        # don't increase / decrease lookup count
-        self._inode_path_map[inode].add(path_new)
-        self._inode_path_map[inode].remove(path_old)
-
-    async def link(self, inode, new_inode_parent, new_name_enced, ctx):
-        new_name = os.fsdecode(new_name_enced)
-        parent = self._inode_to_path(new_inode_parent)
-        path = os.path.join(parent, new_name)
+    async def link(self, vnode, vnode_new_parent, name_new_enced, ctx):
+        name_new = os.fsdecode(name_new_enced)
+        vinfo_new_p = self.vm[vnode_new_parent]
+        path = self.vm.make_path(vinfo_new_p.path, name_new)
+        vinfo = self.vm[vnode]
         try:
-            os.link(self._inode_to_path(inode), path, follow_symlinks=False)
+            os.link(self.vm[vnode].path, path, follow_symlinks=False)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
-        self._remember_path(inode, path)
+        vinfo.add_path(path)
         _acslog.info('LINK: {}'.format(path))
-        return await self.getattr(inode)
+        return await self._getattr(vinfo)
 
-    async def unlink(self, inode_parent, name_enced, ctx):
+    async def unlink(self, vnode_parent, name_enced, ctx):
         name = os.fsdecode(name_enced)
-        parent = self._inode_to_path(inode_parent)
-        path = os.path.join(parent, name)
+        vinfo_p = self.vm[vnode_parent]
+        path = self.vm.make_path(vinfo_p.path, name)
+        vinfo = self.vm[path]
         try:
-            inode = os.lstat(path).st_ino
             os.unlink(path)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
-        if inode in self._inode_path_map:
-            self._forget_path(inode, path)
+        vinfo.remove_path(path)
         _acslog.info('UNLINK: {}'.format(path))
 
-    async def symlink(self, inode_parent, source_enced, target_enced, ctx):
-        source = os.fsdecode(source_enced)
-        target = os.fsdecode(target_enced)
-        parent = self._inode_to_path(inode_parent)
-        path = os.path.join(parent, source)
+    async def symlink(self, vnode_dst_parent, dst_enced, src_enced, ctx):
+        name_src = os.fsdecode(src_enced)
+        name_dst = os.fsdecode(dst_enced)
+        vinfo_dst_p = self.vm[vnode_dst_parent]
+        path_dst = self.vm.make_path(vinfo_dst_p.path, name_dst)
         try:
-            os.symlink(target, path)
-            os.chown(path, ctx.uid, ctx.gid, follow_symlinks=False)
+            os.symlink(name_src, path_dst)
+            os.chown(path_dst, ctx.uid, ctx.gid, follow_symlinks=False)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
-        stat = os.lstat(path)
-        self._remember_path(stat.st_ino, path)
-        return await self.getattr(stat.st_ino)
+        vinfo_dst = self.vm.create_vinfo()
+        vinfo_dst.add_path(path_dst)
+        return await self._getattr(vinfo_dst)
