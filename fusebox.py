@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
-'''
+"""
 fusebox.py - Entry point of FUSE-powered sandbox system
-'''
+"""
 
 import sys
 import pyfuse3
@@ -14,6 +14,7 @@ import fusefs
 logger_root = logging.getLogger('Fusebox')
 dbglog = logger_root.getChild('debug')
 acslog = logger_root.getChild('access')
+
 
 def export_logfile(fs, basepath):
     import csv
@@ -53,20 +54,20 @@ def main():
     acslog.addHandler(acshandler)
 
     # start filesystem ###
-    testfs = fusefs.Fusebox(args.source, args.mountpoint)
+    fsops = fusefs.Fusebox(args.source, args.mountpoint)
     fuse_options = set(pyfuse3.default_options)
     fuse_options.add('fsname=testfs')
     if args.debug:
         fuse_options.add('debug')
     fuse_options.add('dev')
-    pyfuse3.init(testfs, args.mountpoint, fuse_options)
+    pyfuse3.init(fsops, args.mountpoint, fuse_options)
     try:
         trio.run(pyfuse3.main)
     finally:
         pyfuse3.close(unmount=True)
 
     if args.logfile:
-        export_logfile(testfs, args.logfile)
+        export_logfile(fsops, args.logfile)
 
     sys.exit(0)
 
