@@ -4,7 +4,7 @@ import stat
 import pyfuse3
 import logging
 import faulthandler
-from vnode import VnodeManager, FD
+from fusebox.vnode import VnodeManager, FD
 
 faulthandler.enable()
 
@@ -67,12 +67,14 @@ class Fusebox(pyfuse3.Operations):
 
     async def setattr(self, vnode, attr, needs, fd, ctx):
         if fd is None:
-            pofd = self.vm[vnode].path
+            vinfo = self.vm[vnode]
+            pofd = vinfo.path
             trunc = os.truncate
             chmod = os.chmod
             chown = os.chown
             fstat = os.lstat
         else:
+            vinfo = self.vm.get(fd=fd)
             pofd = fd
             trunc = os.ftruncate
             chmod = os.fchmod
@@ -101,7 +103,7 @@ class Fusebox(pyfuse3.Operations):
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
 
-        return self._getattr(self.vm[vnode])
+        return self._getattr(vinfo)
 
     async def getxattr(self, vnode, name_enced, ctx):
         name = os.fsdecode(name_enced)
@@ -219,7 +221,7 @@ class Fusebox(pyfuse3.Operations):
         try:
             fd = FD(os.open(vinfo.path, flags))
         except OSError as exc:
-            raise pyfuse3.FUSEError(exc)
+            raise pyfuse3.FUSEError(exc.errno)
         vinfo.open_vnode(fd)
         # Record accessed files;
         if flags & os.O_RDWR:

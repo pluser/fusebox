@@ -9,7 +9,7 @@ import pyfuse3
 import trio
 import argparse
 import logging
-import fusefs
+from fusebox import fusefs
 
 logger_root = logging.getLogger('Fusebox')
 dbglog = logger_root.getChild('debug')
