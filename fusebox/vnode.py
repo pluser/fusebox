@@ -116,7 +116,9 @@ class VnodeManager:
         self._vnodes[pyfuse3.ROOT_INODE] = VnodeInfo(manager=self)
         self._vnodes[pyfuse3.ROOT_INODE].add_path(root_path)
         self._paths[root_path] = self._vnodes[pyfuse3.ROOT_INODE]
-        self.vnode_payout_max_num = pyfuse3.ROOT_INODE
+        # number 1-1000 is going to be reserved for static pseudo files
+        # so we increase payout counter to 1000
+        self.vnode_payout_max_num = 1000
 
     def __getitem__(self, key: typ.Union[Vnode, AbsPath]) -> VnodeInfo:
         if isinstance(key, VnodeInfo):

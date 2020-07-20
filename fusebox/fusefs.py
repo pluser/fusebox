@@ -24,6 +24,20 @@ class Fusebox(pyfuse3.Operations):
         self.stat_path_open_r = set()
         self.stat_path_open_w = set()
         self.stat_path_open_rw = set()
+        self.auditors = set()
+
+    def register_auditor(self, audit_instance):
+        self.auditors.add(audit_instance)
+        audit_instance.notify_register(self)
+
+    def unregister_auditor(self, audit_instance):
+        self.auditors.remove(audit_instance)
+        audit_instance.notify_unregister()
+
+    def dispatch_auditor(self, func_name, *args, **kwargs):
+        for aud in self.auditors:
+            func = getattr(aud, func_name)
+            func(*args, **kwargs)
 
     # noinspection PyUnusedLocal
     async def statfs(self, ctx):
