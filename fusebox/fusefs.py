@@ -1,9 +1,11 @@
 import os
+import re
 import errno
 import stat
 import pyfuse3
 import logging
 import faulthandler
+from fusebox.auditor import Auditor
 from fusebox.vnode import VnodeManager, FD
 
 faulthandler.enable()
@@ -16,28 +18,21 @@ _acslog = _logger_root.getChild('access')
 class Fusebox(pyfuse3.Operations):
     def __init__(self, path_source, path_dest):
         super().__init__()
+        self.CONTROLLER_FILENAME = 'fuseboxctlv1'
         self.vm = VnodeManager(path_source)
         self._path_source = os.path.abspath(path_source)
         self._path_mountpoint = os.path.abspath(path_dest)
-        stat_source = os.lstat(path_source)
-        self._src_device = stat_source.st_dev
+        self.auditor = Auditor()
+        #stat_source = os.lstat(path_source)
+        #self._src_device = stat_source.st_dev
         self.stat_path_open_r = set()
         self.stat_path_open_w = set()
         self.stat_path_open_rw = set()
-        self.auditors = set()
 
-    def register_auditor(self, audit_instance):
-        self.auditors.add(audit_instance)
-        audit_instance.notify_register(self)
-
-    def unregister_auditor(self, audit_instance):
-        self.auditors.remove(audit_instance)
-        audit_instance.notify_unregister()
-
-    def dispatch_auditor(self, func_name, *args, **kwargs):
-        for aud in self.auditors:
-            func = getattr(aud, func_name)
-            func(*args, **kwargs)
+        # add pseudo file
+        vinfo = self.vm.create_vinfo()
+        vinfo.virtual = True
+        vinfo.add_path(self.vm.make_path(path_source, self.CONTROLLER_FILENAME))
 
     # noinspection PyUnusedLocal
     async def statfs(self, ctx):
@@ -60,22 +55,39 @@ class Fusebox(pyfuse3.Operations):
         _opslog.debug('getattr path: {}, fd: {}'.format(vinfo.paths, vinfo.fds))
         if self._path_mountpoint in vinfo.paths:
             raise pyfuse3.FUSEError(errno.ENOENT)
-        try:
-            stat_ = os.lstat(vinfo.path)
-        except OSError as exc:
-            raise pyfuse3.FUSEError(exc.errno)
-
         entry = pyfuse3.EntryAttributes()
-        # copy attrs from base FS.
-        for attr in ('st_mode', 'st_nlink', 'st_uid', 'st_gid', 'st_rdev',
-                     'st_size', 'st_atime_ns', 'st_mtime_ns', 'st_ctime_ns'):
-            setattr(entry, attr, getattr(stat_, attr))
-        entry.st_ino = vinfo.vnode
-        entry.generation = 0
-        entry.entry_timeout = 0
-        entry.attr_timeout = 0
-        entry.st_blksize = 512
-        entry.st_blocks = ((entry.st_size+entry.st_blksize-1) // entry.st_blksize)
+
+        if vinfo.virtual:
+            entry.st_mode = stat.S_IFREG | stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR
+            entry.st_nlink = 1
+            entry.st_uid = 0
+            entry.st_gid = 0
+            entry.st_rdev = 0
+            entry.st_size = 0
+            entry.st_atime_ns = 0
+            entry.st_mtime_ns = 0
+            entry.st_ctime_ns = 0
+            entry.st_ino = vinfo.vnode
+            entry.generation = 0
+            entry.entry_timeout = 0
+            entry.attr_timeout = 0
+            entry.st_blksize = 512
+            entry.st_blocks = 0
+        else:
+            try:
+                stat_ = os.lstat(vinfo.path)
+            except OSError as exc:
+                raise pyfuse3.FUSEError(exc.errno)
+            # copy attrs from base FS.
+            for attr in ('st_mode', 'st_nlink', 'st_uid', 'st_gid', 'st_rdev',
+                         'st_size', 'st_atime_ns', 'st_mtime_ns', 'st_ctime_ns'):
+                setattr(entry, attr, getattr(stat_, attr))
+            entry.st_ino = vinfo.vnode
+            entry.generation = 0
+            entry.entry_timeout = 0
+            entry.attr_timeout = 0
+            entry.st_blksize = 512
+            entry.st_blocks = ((entry.st_size+entry.st_blksize-1) // entry.st_blksize)
 
         return entry
 
@@ -169,6 +181,8 @@ class Fusebox(pyfuse3.Operations):
         path = self.vm.make_path(self.vm[vnode_parent].path, name)
         vinfo = self.vm[path] if path in self.vm else self.vm.create_vinfo()
         _opslog.debug("lookup called with path: {}".format(path))
+        if not os.path.exists(path):
+            raise pyfuse3.FUSEError(errno.ENOENT)
         if name != '.' and name != '..':
             vinfo.add_path(path)
         return self._getattr(vinfo)
@@ -177,12 +191,17 @@ class Fusebox(pyfuse3.Operations):
         _acslog.info('OPENDIR: {}'.format(self.vm[vnode].paths))
         return vnode
 
-    async def readdir(self, vnode, offset, token):
-        vinfo_p = self.vm[vnode]
-        entries = list()
-        _opslog.debug('readdir called: {}'.format(vinfo_p.path))
+    def _listdir(self, vinfo_p):
+        ent = list()
+        if self._path_source in vinfo_p.paths:  # for pseudo file object
+            name = self.CONTROLLER_FILENAME
+            path = self.vm.make_path(vinfo_p.path, name)
+            vinfo_tmp = self.vm[path] if path in self.vm else self.vm.create_vinfo()
+            vinfo_tmp.add_path(path, inc_ref=False)
+            attr = self._getattr(vinfo_tmp)
+            ent.append((attr.st_ino, name, attr))
         for name in pyfuse3.listdir(vinfo_p.path):
-            if name == '.' or name == '..':
+            if name == '.' or name == '..' or name == self.CONTROLLER_FILENAME:
                 continue
             if self._path_mountpoint in (self.vm.make_path(p, name) for p in vinfo_p.paths):
                 continue  # Don't include mountpoint itself to directory entry
@@ -190,8 +209,13 @@ class Fusebox(pyfuse3.Operations):
             vinfo_tmp = self.vm[path] if path in self.vm else self.vm.create_vinfo()
             vinfo_tmp.add_path(path, inc_ref=False)
             attr = self._getattr(vinfo_tmp)
-            entries.append((attr.st_ino, name, attr))
+            ent.append((attr.st_ino, name, attr))
+        return ent
 
+    async def readdir(self, vnode, offset, token):
+        vinfo_p = self.vm[vnode]
+        _opslog.debug('readdir called: {}'.format(vinfo_p.path))
+        entries = self._listdir(vinfo_p)
         _opslog.debug('read %d entries, starting at %d', len(entries), offset)
         # FIXME: result is break if entries is changed between two calls to readdir()
         for (ino, name, attr) in sorted(entries):
@@ -232,27 +256,43 @@ class Fusebox(pyfuse3.Operations):
 
     async def open(self, vnode, flags, ctx):
         vinfo = self.vm[vnode]
-        try:
-            fd = FD(os.open(vinfo.path, flags))
-        except OSError as exc:
-            raise pyfuse3.FUSEError(exc.errno)
-        vinfo.open_vnode(fd)
-        # Record accessed files;
-        if flags & os.O_RDWR:
-            self.stat_path_open_rw.add(vinfo.path)
-        elif flags & os.O_WRONLY:
-            self.stat_path_open_w.add(vinfo.path)
-        else:
-            self.stat_path_open_r.add(vinfo.path)
-
         _acslog.info('OPEN: {}'.format(vinfo.path))
-        return pyfuse3.FileInfo(fh=fd)
+        if vinfo.virtual:
+            fd = FD(os.open('/dev/null', flags))  # reserve file descriptor number
+            vinfo.open_vnode(fd)
+            return pyfuse3.FileInfo(fh=fd)
+        else:
+            if flags & os.O_RDWR and not (self.auditor.ask_writable(vinfo.path) and self.auditor.ask_readable(vinfo.path)):
+                _opslog.info('Reading and writing to PATH <{}> is not permitted.'.format(vinfo.path))
+                raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
+            if flags & os.O_WRONLY and not self.auditor.ask_writable(vinfo.path):
+                _opslog.info('Writing to PATH <{}> is not permitted.'.format(vinfo.path))
+                raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
+            if not flags & (os.O_RDWR | os.O_WRONLY) and not self.auditor.ask_readable(vinfo.path):
+                _opslog.info('Reading from PATH <{}> is not permitted.'.format(vinfo.path))
+                raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
+            try:
+                fd = FD(os.open(vinfo.path, flags))
+            except OSError as exc:
+                raise pyfuse3.FUSEError(exc.errno)
+            # Record accessed files;
+            if flags & os.O_RDWR:
+                self.stat_path_open_rw.add(vinfo.path)
+            elif flags & os.O_WRONLY:
+                self.stat_path_open_w.add(vinfo.path)
+            else:
+                self.stat_path_open_r.add(vinfo.path)
+            vinfo.open_vnode(fd)
+            return pyfuse3.FileInfo(fh=fd)
 
     async def read(self, fd, offset, length):
-        os.lseek(fd, offset, os.SEEK_SET)
         vinfo = self.vm.get(fd=fd)
         _acslog.info('READ: {}'.format(vinfo.path))
-        return os.read(fd, length)
+        if vinfo.virtual:
+            return b''
+        else:
+            os.lseek(fd, offset, os.SEEK_SET)
+            return os.read(fd, length)
 
     async def create(self, vnode_parent, name, mode, flags, ctx):
         path = self.vm.make_path(self.vm[vnode_parent].path, os.fsdecode(name))
@@ -266,10 +306,33 @@ class Fusebox(pyfuse3.Operations):
         _acslog.info('CREATE: {}'.format(path))
         return pyfuse3.FileInfo(fh=fd), self._getattr(vinfo)
 
+    def _parse_command(self, buf) -> None:
+        buf = buf.decode('utf-8')
+        for l in buf.splitlines():
+            match = re.fullmatch(r'^(?P<order>\w+)\s(?P<args>.*)$', l)
+            _opslog.debug('ORDER: <{}>\t\tARGS: <{}>'.format(match.group('order'), match.group('args')))
+            order = match.group('order').upper()
+            path = os.path.abspath(match.group('args'))
+            if not os.path.exists(path):
+                _opslog.warning('Given PATH <{}> does not exists.'.format(path))
+            if order == 'ALLOWREAD':
+                self.auditor.permission_read_paths.append(path)
+                _opslog.info('Permited reading from path <{}>.'.format(path))
+            elif order == 'ALLOWWRITE':
+                self.auditor.permission_write_paths.append(path)
+                _opslog.info('Permited writing to path <{}>.'.format(path))
+            else:
+                _opslog.warning('Unknown ORDER <{}>\twith ARGS <{}>. Ignored.'.format(order, path))
+
     async def write(self, fd, offset, buf):
-        os.lseek(fd, offset, os.SEEK_SET)
         _acslog.info('WRITE: {}'.format(self.vm.get(fd=fd).path))
-        return os.write(fd, buf)
+        vinfo = self.vm.get(fd=fd)
+        if vinfo.virtual:
+            self._parse_command(buf)
+            return len(buf)
+        else:
+            os.lseek(fd, offset, os.SEEK_SET)
+            return os.write(fd, buf)
 
     async def release(self, fd):
         try:

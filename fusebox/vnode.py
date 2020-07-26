@@ -16,6 +16,7 @@ class VnodeInfo:
         self._paths: typ.Set[AbsPath] = set()
         self._fds: typ.Set[FD] = set()
         self.refcount: int = 0
+        self.virtual: bool = False  # indicate this backend file not exists. Used for pseudo files.
 
         self.vnode: Vnode = Vnode(manager.payout_vnode_num())
         self.manager.notify_vinfo_bind(self)
@@ -53,8 +54,6 @@ class VnodeInfo:
 
     def add_path(self, path: AbsPath, inc_ref: bool = True) -> None:
         """Register the path. If inc_ref is False, keep reference counter."""
-        if not os.path.exists(path):
-            raise pyfuse3.FUSEError(errno.ENOENT)
         abspath = os.path.abspath(path)
         self._paths.add(abspath)
         if inc_ref:
@@ -77,6 +76,9 @@ class VnodeInfo:
         i.e. the parent directory is renamed.
         This method will confirm mappings and delete if it was invalid.
         """
+        # avoid cleanup when the node is pseudo since file not exists actually.
+        if self.virtual:
+            return
         for p in self._paths.copy():
             p = os.path.abspath(p)
             if not os.path.exists(p):
@@ -116,9 +118,6 @@ class VnodeManager:
         self._vnodes[pyfuse3.ROOT_INODE] = VnodeInfo(manager=self)
         self._vnodes[pyfuse3.ROOT_INODE].add_path(root_path)
         self._paths[root_path] = self._vnodes[pyfuse3.ROOT_INODE]
-        # number 1-1000 is going to be reserved for static pseudo files
-        # so we increase payout counter to 1000
-        self.vnode_payout_max_num = 1000
 
     def __getitem__(self, key: typ.Union[Vnode, AbsPath]) -> VnodeInfo:
         if isinstance(key, VnodeInfo):

@@ -23,7 +23,19 @@ class TestFuseFS(unittest.TestCase):
         self.mock_os_path_exists = self.patch_os_path_exists.start()
         self.mock_os_path_exists.return_value = True
 
+        self.patch_os_lstat = patch('fusebox.fusefs.os.lstat')
+        self.mock_os_lstat = self.patch_os_lstat.start()
+
+        self.patch_os_path_isdir = patch('fusebox.fusefs.os.path.isdir')
+        self.mock_os_path_isdir = self.patch_os_path_isdir.start()
+        self.mock_os_path_isdir.return_value = True
+
+        self.ops = fusefs.Fusebox(self.PATH_SRC, self.PATH_DST)
+        self.ops.auditor.security_model = self.ops.auditor.security_model.BLACKLIST
+
     def tearDown(self):
+        self.patch_os_path_isdir.stop()
+        self.patch_os_lstat.stop()
         self.patch_os_path_exists.stop()
 
     @patch('fusebox.fusefs.os.lstat')
@@ -34,7 +46,7 @@ class TestFuseFS(unittest.TestCase):
         return ops
 
     @patch('fusebox.fusefs.pyfuse3.EntryAttributes')
-    def test__getattr(self, mock_entatt):
+    def test__getattr_normal(self, mock_entatt):
         ops = self.test_init()
         vinfo_a = ops.vm.create_vinfo()
         vinfo_a.add_path('/test/root/file1')
@@ -47,6 +59,17 @@ class TestFuseFS(unittest.TestCase):
         with patch('fusebox.fusefs.os.lstat') as mock_lstat:
             entry = ops._getattr(vinfo_a)
             mock_lstat.assert_called_once_with(vinfo_a.path)
+            self.assertEqual(entry.st_ino, vinfo_a.vnode)
+
+    @patch('fusebox.fusefs.pyfuse3.EntryAttributes')
+    def test__getattr_virtual(self, mock_entatt):
+        ops = self.test_init()
+        vinfo_a = ops.vm.create_vinfo()
+        vinfo_a.add_path(self.PATH_SRC + '/fuseboxctl')
+        vinfo_a.virtual = True
+        with patch('fusebox.fusefs.os.lstat') as mock_lstat:
+            entry = ops._getattr(vinfo_a)
+            mock_lstat.assert_not_called()
             self.assertEqual(entry.st_ino, vinfo_a.vnode)
 
     class DefaultAttrDict(UserDict):
@@ -266,23 +289,39 @@ class TestFuseFS(unittest.TestCase):
         attr = self._exec(ops.lookup, vinfo_a.vnode, os.fsencode('file1'))
         self.assertEqual(attr.st_ino, vinfo_b.vnode)
 
-    @patch('fusebox.fusefs.Fusebox._getattr')
     @patch('fusebox.fusefs.pyfuse3.listdir')
     @patch('fusebox.fusefs.pyfuse3.readdir_reply')
-    def test_readdir(self, mock_pfrep, mock_listdir, mock_getattr):
-        ops = self.test_init()
+    def test_readdir_normal(self, mock_pfrep, mock_listdir):
+        ops = self.ops
         PARENT_DIR = self.PATH_SRC + '/other'
         vinfo_parent = ops.vm.create_vinfo()
         vinfo_parent.add_path(PARENT_DIR)
         mock_listdir.return_value = ['file1', 'file2']
-        mock_getattr.return_value.st_ino = 3
         self._exec(ops.readdir, vnode=vinfo_parent.vnode, offset=0, token='ABCD')
         mock_listdir.assert_called_with(PARENT_DIR)
+        mock_pfrep.assert_called()
+        (token, name, entryattr, vnodenum), _ = mock_pfrep.call_args
+        self.assertEqual(token, 'ABCD')
+        self.assertEqual(name, b'file2')
+        self.assertIsInstance(entryattr, pyfuse3.EntryAttributes)
+        self.assertEqual(vnodenum, ops.vm.get(path=PARENT_DIR + '/file2').vnode)
+
+    @patch('fusebox.fusefs.Fusebox._getattr')
+    @patch('fusebox.fusefs.pyfuse3.listdir')
+    @patch('fusebox.fusefs.pyfuse3.readdir_reply')
+    def test_readdir_virtual(self, mock_pfrep, mock_listdir, mock_getattr):
+        ops = self.test_init()
+        vinfo_parent = ops.vm.create_vinfo()
+        vinfo_parent.add_path(self.PATH_SRC)
+        mock_listdir.assert_not_called()
+        mock_getattr.return_value.st_ino = 2
+        self._exec(ops.readdir, vnode=vinfo_parent.vnode, offset=0, token='ABCD')
+        mock_listdir.assert_called_with(self.PATH_SRC)
         mock_pfrep.assert_called_with(
             'ABCD',
-            os.fsencode(mock_listdir.return_value[1]),
+            os.fsencode('fuseboxctlv1'),
             mock_getattr.return_value,
-            ops.vm.get(path=PARENT_DIR+'/file2').vnode)
+            ops.vm.get(path=ops.vm.make_path(self.PATH_SRC, 'fuseboxctlv1')).vnode)
 
     def test_open(self):
         ops = self.test_init()
@@ -290,10 +329,46 @@ class TestFuseFS(unittest.TestCase):
         vinfo_a.add_path(self.PATH_SRC + '/file1')
         with patch('fusebox.fusefs.os.open') as mock_open:
             mock_open.side_effect = OSError(errno.ENOENT, 'Artifact Error')
+            mock_open.return_value = 7
             self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_RDONLY, None)
         with patch('fusebox.fusefs.os.open') as mock_open:
             mock_open.return_value = 7
-            finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_RDONLY, None)
-            self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
-            self.assertEqual(finfo_a.fh, mock_open.return_value)
+            with patch.object(ops.auditor, 'ask_readable') as mock_readable, \
+                 patch.object(ops.auditor, 'ask_writable') as mock_writable:
+                mock_readable.return_value = True
+                mock_writable.return_value = False
+                finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_RDONLY, None)
+                self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
+                self.assertEqual(finfo_a.fh, mock_open.return_value)
+                self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_WRONLY, None)
+                self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_RDWR, None)
+            with patch.object(ops.auditor, 'ask_readable') as mock_readable, \
+                 patch.object(ops.auditor, 'ask_writable') as mock_writable:
+                mock_readable.return_value = False
+                mock_writable.return_value = False
+                self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_RDONLY, None)
+                self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_WRONLY, None)
+                self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_RDWR, None)
+            with patch.object(ops.auditor, 'ask_readable') as mock_readable, \
+                 patch.object(ops.auditor, 'ask_writable') as mock_writable:
+                mock_readable.return_value = False
+                mock_writable.return_value = True
+                self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_RDONLY, None)
+                finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_WRONLY, None)
+                self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
+                self.assertEqual(finfo_a.fh, mock_open.return_value)
+                self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_RDWR, None)
+            with patch.object(ops.auditor, 'ask_readable') as mock_readable, \
+                 patch.object(ops.auditor, 'ask_writable') as mock_writable:
+                mock_readable.return_value = True
+                mock_writable.return_value = True
+                finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_RDONLY, None)
+                self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
+                self.assertEqual(finfo_a.fh, mock_open.return_value)
+                finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_WRONLY, None)
+                self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
+                self.assertEqual(finfo_a.fh, mock_open.return_value)
+                finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_RDWR, None)
+                self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
+                self.assertEqual(finfo_a.fh, mock_open.return_value)
 

@@ -1,13 +1,20 @@
 import typing as typ
 import pyfuse3
+import enum
+
+
+class SecurityModel(enum.Enum):
+    WHITELIST = enum.auto()
+    BLACKLIST = enum.auto()
 
 
 class Auditor():
     def __init__(self) -> None:
         super().__init__()
         self.ops: typ.Optional[pyfuse3.Operations] = None
-        self.read_forbidden_paths: typ.Set[str] = set()
-        self.write_forbidden_paths: typ.Set[str] = set()
+        self.permission_read_paths: typ.List[str] = list()
+        self.permission_write_paths: typ.List[str] = list()
+        self.security_model = SecurityModel.WHITELIST
 
     @property
     def isactive(self):
@@ -19,29 +26,16 @@ class Auditor():
     def notify_unregister(self) -> None:
         self.ops = None
 
-    @staticmethod
-    def _check_permission(forbidden_paths, given_path) -> bool:
-        return not given_path.startswith(tuple(forbidden_paths))
+    def _check_permission(self, forbidden_paths, given_path) -> bool:
+        if self.security_model == SecurityModel.BLACKLIST:
+            return not given_path.startswith(tuple(forbidden_paths))
+        elif self.security_model == SecurityModel.WHITELIST:
+            return given_path.startswith(tuple(forbidden_paths))
+        else:
+            raise RuntimeError
 
-    def readable(self, path) -> bool:
-        return self._check_permission(self.read_forbidden_paths, path)
+    def ask_readable(self, path) -> bool:
+        return self._check_permission(self.permission_read_paths, path)
 
-    def writable(self, path) -> bool:
-        return self._check_permission(self.write_forbidden_paths, path)
-
-    @staticmethod
-    def _add_forbidden_path(forbidden_paths, given_path) -> None:
-        return forbidden_paths.add(given_path)
-
-    def add_read_forbidden_path(self, path) -> None:
-        return self._add_forbidden_path(self.read_forbidden_paths, path)
-
-    def add_write_forbidden_path(self, path) -> None:
-        return self._add_forbidden_path(self.write_forbidden_paths, path)
-
-    def request_handler(self, func_name, *args, **kwargs) -> bool:
-        func = getattr(self, func_name)
-        return func(*args, **kwargs)
-
-    def getattr(self, vnode, ctx=None) -> None:
-        print(vnode)
+    def ask_writable(self, path) -> bool:
+        return self._check_permission(self.permission_write_paths, path)

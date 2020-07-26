@@ -14,18 +14,17 @@ class TestAuditor(unittest.TestCase):
     def _exec(func, *args, **kwargs):
         return trio.run(functools.partial(func, *args, **kwargs))
 
-    @patch('fusebox.fusefs.os.path.isdir')
-    @patch('fusebox.fusefs.os.path.exists')
-    @patch('fusebox.fusefs.os.lstat')
-    def test_getatter(self, *_):
-        fsops = fusefs.Fusebox('/test/root/src', '/test/root/dst')
-        aud = auditor.Auditor()
-        fsops.register_auditor(aud)
-        fsops.dispatch_auditor('getattr', 1234, None)
-
     def test_check_permission(self):
         aud = auditor.Auditor()
-        aud.add_read_forbidden_path('/test/root/src/forbid_read')
-        aud.add_write_forbidden_path('/test/root/src/forbid_write')
-        self.assertFalse(aud.readable('/test/root/src/forbid_read/file1'))
-        self.assertFalse(aud.writable('/test/root/src/forbid_write/file1'))
+        aud.permission_read_paths.append('/test/root/src/permit_read')
+        aud.permission_write_paths.append('/test/root/src/permit_write')
+        self.assertFalse(aud.ask_readable('/test/root/src/forbid_read/file1'))
+        self.assertFalse(aud.ask_writable('/test/root/src/forbid_write/file1'))
+        self.assertFalse(aud.ask_readable('/test/root/src/forbid_read/nest1/file1'))
+        self.assertFalse(aud.ask_writable('/test/root/src/forbid_write/nest1/file1'))
+        self.assertTrue(aud.ask_readable('/test/root/src/permit_read'))
+        self.assertTrue(aud.ask_writable('/test/root/src/permit_write'))
+        self.assertTrue(aud.ask_readable('/test/root/src/permit_read/file1'))
+        self.assertTrue(aud.ask_writable('/test/root/src/permit_write/file1'))
+        self.assertTrue(aud.ask_readable('/test/root/src/permit_read/nest1/file1'))
+        self.assertTrue(aud.ask_writable('/test/root/src/permit_write/nest1/file1'))
