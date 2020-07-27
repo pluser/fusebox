@@ -36,7 +36,18 @@ The sandbox currently used in the Portage package system hooks up writes to the 
    - `umount -l ${MOUNTPOINT}/{proc,sys,dev,tmp}`
    - `fusermount -u ${MOUNTPOINT}` 
 
-## Export to logfile
+## Features
+### Access Control
+1. In default, Accessing any file is prohibited.
+```cat: /mnt/fusebox/etc/os-release: Permission denied```
+1. To give permission, you can write pseudo file as `fuseboxctlv1` in the mountpoint.
+   Syntax is like below.
+   ```
+   allowread /etc/os-release
+   allowwrite /etc/os-release
+   ```
+
+### Export to logfile
 1. Please use logfile option.
 `python fusebox.py --logfile=foobar / ${MOUNTPOINT}`
 Fusebox exports three files `foobar.r.txt`, `foobar.w.txt`, `foobar.rw.txt` if mountpoint is unmounted gracefully.
