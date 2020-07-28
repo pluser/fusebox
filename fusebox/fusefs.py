@@ -296,9 +296,12 @@ class Fusebox(pyfuse3.Operations):
 
     async def create(self, vnode_parent, name, mode, flags, ctx):
         path = self.vm.make_path(self.vm[vnode_parent].path, os.fsdecode(name))
+        if path in self.vm and self.vm[path].virtual:
+            raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied, since pseudo file should not be created.
         if not self.auditor.ask_writable(path):
             _opslog.info('Creating to PATH <{}> is not permitted.'.format(path))
             raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
+
         vinfo = self.vm.create_vinfo()
         try:
             fd = FD(os.open(path, flags | os.O_CREAT | os.O_TRUNC, mode))

@@ -395,3 +395,10 @@ class TestFuseFS(unittest.TestCase):
         ops.auditor.permission_write_paths.append(self.PATH_SRC + '/parent1')
         self.assertRaises(pyfuse3.FUSEError, self._exec, ops.create, vinfo_p.vnode, os.fsencode('child1'), 0, 0, None)
         mock_open.assert_not_called()
+
+    @patch('fusebox.fusefs.os.open')
+    def test_create_pseudo(self, mock_open):
+        ops = self.ops
+        vinfo_p = ops.vm.get(path=self.PATH_SRC)
+        self.assertRaises(pyfuse3.FUSEError, self._exec, ops.create, vinfo_p.vnode, os.fsencode(ops.CONTROLLER_FILENAME), 0, 0, None)
+        mock_open.assert_not_called()
