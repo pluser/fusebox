@@ -372,3 +372,26 @@ class TestFuseFS(unittest.TestCase):
                 self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
                 self.assertEqual(finfo_a.fh, mock_open.return_value)
 
+    @patch('fusebox.fusefs.os.open')
+    def test_create_access_allowed(self, mock_open):
+        ops = self.ops
+        vinfo_p = ops.vm.create_vinfo()
+        vinfo_p.add_path(self.PATH_SRC + '/parent1')
+        self._exec(ops.create, vinfo_p.vnode, os.fsencode('child1'), 0, 0, None)
+        mock_open.assert_called_with(self.PATH_SRC + '/parent1/child1', os.O_CREAT | os.O_TRUNC, 0)
+
+    @patch('fusebox.fusefs.os.open')
+    def test_create_access_prohibited(self, mock_open):
+        ops = self.ops
+        vinfo_p = ops.vm.create_vinfo()
+        vinfo_p.add_path(self.PATH_SRC + '/parent1')
+
+        ops.auditor.permission_write_paths.append(self.PATH_SRC + '/parent1/child1')
+        self.assertRaises(pyfuse3.FUSEError, self._exec, ops.create, vinfo_p.vnode, os.fsencode('child1'), 0, 0, None)
+        mock_open.assert_not_called()
+
+        mock_open.reset_mock()
+        ops.auditor.permission_write_paths.clear()
+        ops.auditor.permission_write_paths.append(self.PATH_SRC + '/parent1')
+        self.assertRaises(pyfuse3.FUSEError, self._exec, ops.create, vinfo_p.vnode, os.fsencode('child1'), 0, 0, None)
+        mock_open.assert_not_called()
