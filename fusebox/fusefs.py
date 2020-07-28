@@ -181,7 +181,7 @@ class Fusebox(pyfuse3.Operations):
         path = self.vm.make_path(self.vm[vnode_parent].path, name)
         vinfo = self.vm[path] if path in self.vm else self.vm.create_vinfo()
         _opslog.debug("lookup called with path: {}".format(path))
-        if not os.path.exists(path):
+        if not os.path.exists(path) and not vinfo.virtual:
             raise pyfuse3.FUSEError(errno.ENOENT)
         if name != '.' and name != '..':
             vinfo.add_path(path)
