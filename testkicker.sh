@@ -11,3 +11,4 @@ poetry install
 echo '*** Installing is done.'
 echo '*** Start testing...'
 poetry run python fusebox.py --help
+pertry run python -m pytest
