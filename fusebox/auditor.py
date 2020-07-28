@@ -16,21 +16,11 @@ class Auditor():
         self.permission_write_paths: typ.List[str] = list()
         self.security_model = SecurityModel.WHITELIST
 
-    @property
-    def isactive(self):
-        return True if self.ops is not None else False
-
-    def notify_register(self, operation_instance) -> None:
-        self.ops = operation_instance
-
-    def notify_unregister(self) -> None:
-        self.ops = None
-
-    def _check_permission(self, forbidden_paths, given_path) -> bool:
+    def _check_permission(self, permission_paths, given_path) -> bool:
         if self.security_model == SecurityModel.BLACKLIST:
-            return not given_path.startswith(tuple(forbidden_paths))
+            return not given_path.startswith(tuple(permission_paths))
         elif self.security_model == SecurityModel.WHITELIST:
-            return given_path.startswith(tuple(forbidden_paths))
+            return given_path.startswith(tuple(permission_paths))
         else:
             raise RuntimeError
 
