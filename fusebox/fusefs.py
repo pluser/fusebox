@@ -243,6 +243,8 @@ class Fusebox(pyfuse3.Operations):
 
     async def mkdir(self, vnode_parent, name, mode, ctx):
         path = self.vm.make_path(self.vm[vnode_parent].path, os.fsdecode(name))
+        if not self.auditor.ask_writable(path):
+            raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
         try:
             os.mkdir(path, mode=(mode & ~ctx.umask))
             os.chown(path, ctx.uid, ctx.gid)
@@ -256,6 +258,8 @@ class Fusebox(pyfuse3.Operations):
     async def rmdir(self, vnode_parent, name, ctx):
         path = self.vm.make_path(self.vm[vnode_parent].path, os.fsdecode(name))
         vinfo = self.vm[path]
+        if not self.auditor.ask_writable(path):
+            raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
         try:
             os.rmdir(path)
         except OSError as exc:

@@ -323,6 +323,53 @@ class TestFuseFS(unittest.TestCase):
             mock_getattr.return_value,
             ops.vm.get(path=ops.vm.make_path(self.PATH_SRC, 'fuseboxctlv1')).vnode)
 
+    @patch('fusebox.fusefs.os.mkdir')
+    @patch('fusebox.fusefs.os.chown')
+    def test_mkdir_regular(self, mock_chown, mock_mkdir):
+        ops = self.ops
+        vinfo_p = ops.vm[self.PATH_SRC]
+        ctx = MagicMock()
+        ctx.umask = 0
+        self._exec(ops.mkdir, vinfo_p.vnode, os.fsencode('file1'), 12345, ctx)
+        mock_mkdir.assert_called_with(self.PATH_SRC + '/file1', mode=12345)
+        mock_chown.assert_called_with(self.PATH_SRC + '/file1', ctx.uid, ctx.gid)
+
+    @patch('fusebox.fusefs.os.mkdir')
+    @patch('fusebox.fusefs.os.chown')
+    def test_mkdir_permission(self, mock_chown, mock_mkdir):
+        ops = self.ops
+        ops.auditor.permission_write_paths.append(self.PATH_SRC + '/file1')
+        vinfo_p = ops.vm[self.PATH_SRC]
+        ctx = MagicMock()
+        with self.assertRaises(pyfuse3.FUSEError) as e:
+            self._exec(ops.mkdir, vinfo_p.vnode, os.fsencode('file1'), 12345, ctx)
+        self.assertEqual(e.exception.args[0], errno.EACCES)  # Permission denied
+        mock_mkdir.assert_not_called()
+        mock_chown.assert_not_called()
+
+    @patch('fusebox.fusefs.os.rmdir')
+    def test_rmdir_regular(self, mock_rmdir):
+        ops = self.ops
+        vinfo_p = ops.vm[self.PATH_SRC]
+        vinfo = ops.vm.create_vinfo()
+        vinfo.add_path(self.PATH_SRC + '/file1')
+        ctx = MagicMock()
+        self._exec(ops.rmdir, vinfo_p.vnode, os.fsencode('file1'), ctx)
+        mock_rmdir.assert_called_with(self.PATH_SRC + '/file1')
+
+    @patch('fusebox.fusefs.os.rmdir')
+    def test_rmdir_permission(self, mock_rmdir):
+        ops = self.ops
+        ops.auditor.permission_write_paths.append(self.PATH_SRC + '/file1')
+        vinfo_p = ops.vm[self.PATH_SRC]
+        vinfo = ops.vm.create_vinfo()
+        vinfo.add_path(self.PATH_SRC + '/file1')
+        ctx = MagicMock()
+        with self.assertRaises(pyfuse3.FUSEError) as e:
+            self._exec(ops.rmdir, vinfo_p.vnode, os.fsencode('file1'), ctx)
+        self.assertEqual(e.exception.args[0], errno.EACCES)  # Permission denied
+        mock_rmdir.assert_not_called()
+
     def test_open(self):
         ops = self.test_init()
         vinfo_a = ops.vm.create_vinfo()
