@@ -12,6 +12,7 @@ class SecurityModel(enum.Enum):
 class Order(enum.Enum):
     ALLOW = enum.auto()
     DENY = enum.auto()
+    DISCARD = enum.auto()
 
 
 Permission = namedtuple('Permission', 'order path')
@@ -32,13 +33,15 @@ class Auditor():
                 return l.order
         return None  # If no valid order found
 
-    def _check_permission(self, permission_list: typ.List[Permission], given_path: str) -> bool:
+    def _check_permission(self, permission_list: typ.List[Permission], given_path: str) -> typ.Union[bool, Order]:
         order = self._get_order(permission_list, given_path)
         if order:
             if order == Order.ALLOW:
                 return True
             elif order == Order.DENY:
                 return False
+            elif order == Order.DISCARD:
+                return Order.DISCARD  # should be treated as True
             else:
                 raise RuntimeError
         else:
@@ -55,6 +58,12 @@ class Auditor():
     def ask_writable(self, path: str) -> bool:
         return self._check_permission(self.permission_write, path)
 
+    def ask_discard(self, path: str) -> bool:
+        if self._check_permission(self.permission_write, path) == Order.DISCARD:
+            return True
+        else:
+            return False
+
     def allowread(self, path: str) -> None:
         self.permission_read.append(Permission(Order.ALLOW, path))
 
@@ -66,3 +75,6 @@ class Auditor():
 
     def denywrite(self, path: str) -> None:
         self.permission_write.append(Permission(Order.DENY, path))
+
+    def discardwrite(self, path: str) -> None:
+        self.permission_write.append(Permission(Order.DISCARD, path))

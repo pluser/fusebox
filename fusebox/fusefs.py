@@ -355,6 +355,10 @@ class Fusebox(pyfuse3.Operations):
                 self.auditor.denywrite(path)
                 _opslog.info('Prohibited writing to path <{}>.'.format(path))
 
+            elif order == 'DISCARDWRITE':
+                self.auditor.discardwrite(path)
+                _opslog.info('Throwing away inputs to path <{}>.'.format(path))
+
             elif order == 'ADDWRITE':
                 self.auditor.allowread(path)
                 self.auditor.allowwrite(path)
@@ -366,7 +370,9 @@ class Fusebox(pyfuse3.Operations):
                 _opslog.info('Prohibited reading/writing to path <{}>.'.format(path))
 
             elif order == 'ADDPREDICT':
-                _opslog.warning('ORDER <{}>\twith ARGS <{}> is not supported for now. Ignored.'.format(order, path))
+                self.auditor.allowread(path)
+                self.auditor.discardwrite(path)
+                _opslog.info('Throwing away inputs to path <{}>.'.format(path))
 
             else:
                 _opslog.warning('Unknown ORDER <{}>\twith ARGS <{}>. Ignored.'.format(order, path))
@@ -378,8 +384,12 @@ class Fusebox(pyfuse3.Operations):
             self._parse_command(buf)
             return len(buf)
         else:
-            os.lseek(fd, offset, os.SEEK_SET)
-            return os.write(fd, buf)
+            if self.auditor.ask_discard(vinfo.path):
+                # FIXME: Can't check needs of discard certainly since fd doesn't have path info
+                return len(buf)  # throwing away inputs
+            else:
+                os.lseek(fd, offset, os.SEEK_SET)
+                return os.write(fd, buf)
 
     async def release(self, fd):
         try:

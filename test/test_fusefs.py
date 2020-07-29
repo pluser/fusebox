@@ -451,6 +451,40 @@ class TestFuseFS(unittest.TestCase):
         self.assertRaises(pyfuse3.FUSEError, self._exec, ops.create, vinfo_p.vnode, os.fsencode(ops.CONTROLLER_FILENAME), 0, 0, None)
         mock_open.assert_not_called()
 
+    @patch('fusebox.fusefs.os.lseek')
+    @patch('fusebox.fusefs.os.write')
+    def test_write_regular(self, mock_write, mock_seek):
+        ops = self.ops
+        vinfo = ops.vm.create_vinfo()
+        vinfo.add_path(self.PATH_SRC + '/file1')
+        vinfo.open_vnode(123)
+        length = self._exec(ops.write, 123, 0, 'foobar_buffer')
+        mock_seek.assert_called_with(123, 0, os.SEEK_SET)
+        mock_write.assert_called_with(123, 'foobar_buffer')
+        self.assertEqual(length, mock_write())
+
+    @patch('fusebox.fusefs.Fusebox._parse_command')
+    def test_write_pseudo(self, mock_parser):
+        ops = self.ops
+        vinfo = ops.vm.create_vinfo()
+        vinfo.virtual = True
+        vinfo.add_path(self.PATH_SRC + '/file1')
+        vinfo.open_vnode(123)
+        length = self._exec(ops.write, 123, 0, 'foobar_buffer')
+        mock_parser.assert_called_with('foobar_buffer')
+        self.assertEqual(length, len('foobar_buffer'))
+
+    @patch('fusebox.fusefs.Auditor.ask_discard')
+    def test_write_discard(self, mock_discard):
+        ops = self.ops
+        vinfo = ops.vm.create_vinfo()
+        vinfo.add_path(self.PATH_SRC + '/file1')
+        vinfo.open_vnode(123)
+        ops.auditor.discardwrite(self.PATH_SRC + '/file1')
+        length = self._exec(ops.write, 123, 0, 'foobar_buffer')
+        mock_discard.assert_called_with(vinfo.path)
+        self.assertEqual(length, len('foobar_buffer'))
+
     @patch('fusebox.fusefs.os.rename')
     def test_rename_regular(self, mock_rename):
         ops = self.ops

@@ -29,6 +29,14 @@ class TestAuditor(unittest.TestCase):
         self.assertTrue(aud.ask_readable('/test/root/src/permit_read/nest1/file1'))
         self.assertTrue(aud.ask_writable('/test/root/src/permit_write/nest1/file1'))
 
+        self.assertFalse(aud.ask_readable('/test/root/src/discard_write'))
+        self.assertFalse(aud.ask_writable('/test/root/src/discard_write'))
+        self.assertFalse(aud.ask_discard('/test/root/src/discard_write'))
+        aud.discardwrite('/test/root/src/discard_write')
+        self.assertFalse(aud.ask_readable('/test/root/src/discard_write'))
+        self.assertTrue(aud.ask_writable('/test/root/src/discard_write'))
+        self.assertTrue(aud.ask_discard('/test/root/src/discard_write'))
+
     def test_check_permission_order(self):
         aud = auditor.Auditor()
         self.assertFalse(aud.ask_readable('/test/root/sample1'))
