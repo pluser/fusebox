@@ -8,6 +8,7 @@ import stat
 import unittest
 from unittest.mock import MagicMock, patch
 from fusebox import fusefs
+from fusebox.auditor import Permission, Order
 
 
 class TestFuseFS(unittest.TestCase):
@@ -338,7 +339,7 @@ class TestFuseFS(unittest.TestCase):
     @patch('fusebox.fusefs.os.chown')
     def test_mkdir_permission(self, mock_chown, mock_mkdir):
         ops = self.ops
-        ops.auditor.permission_write_paths.append(self.PATH_SRC + '/file1')
+        ops.auditor.denywrite(self.PATH_SRC + '/file1')
         vinfo_p = ops.vm[self.PATH_SRC]
         ctx = MagicMock()
         with self.assertRaises(pyfuse3.FUSEError) as e:
@@ -360,7 +361,7 @@ class TestFuseFS(unittest.TestCase):
     @patch('fusebox.fusefs.os.rmdir')
     def test_rmdir_permission(self, mock_rmdir):
         ops = self.ops
-        ops.auditor.permission_write_paths.append(self.PATH_SRC + '/file1')
+        ops.auditor.denywrite(self.PATH_SRC + '/file1')
         vinfo_p = ops.vm[self.PATH_SRC]
         vinfo = ops.vm.create_vinfo()
         vinfo.add_path(self.PATH_SRC + '/file1')
@@ -433,13 +434,13 @@ class TestFuseFS(unittest.TestCase):
         vinfo_p = ops.vm.create_vinfo()
         vinfo_p.add_path(self.PATH_SRC + '/parent1')
 
-        ops.auditor.permission_write_paths.append(self.PATH_SRC + '/parent1/child1')
+        ops.auditor.denywrite(self.PATH_SRC + '/parent1/child1')
         self.assertRaises(pyfuse3.FUSEError, self._exec, ops.create, vinfo_p.vnode, os.fsencode('child1'), 0, 0, None)
         mock_open.assert_not_called()
 
         mock_open.reset_mock()
-        ops.auditor.permission_write_paths.clear()
-        ops.auditor.permission_write_paths.append(self.PATH_SRC + '/parent1')
+        ops.auditor.permission_write.clear()
+        ops.auditor.denywrite(self.PATH_SRC + '/parent1')
         self.assertRaises(pyfuse3.FUSEError, self._exec, ops.create, vinfo_p.vnode, os.fsencode('child1'), 0, 0, None)
         mock_open.assert_not_called()
 
@@ -467,7 +468,7 @@ class TestFuseFS(unittest.TestCase):
     @patch('fusebox.fusefs.os.rename')
     def test_rename_permission(self, mock_rename):
         ops = self.ops
-        ops.auditor.permission_write_paths.append(self.PATH_SRC + '/parent2')
+        ops.auditor.denywrite(self.PATH_SRC + '/parent2')
         oldp = ops.vm.create_vinfo()
         oldp.add_path(self.PATH_SRC + '/parent1')
         vinfo = ops.vm.create_vinfo()
@@ -498,7 +499,7 @@ class TestFuseFS(unittest.TestCase):
     @patch('fusebox.fusefs.os.link')
     def test_link_permission(self, mock_link):
         ops = self.ops
-        ops.auditor.permission_write_paths.append(self.PATH_SRC + '/parent2')
+        ops.auditor.denywrite(self.PATH_SRC + '/parent2')
         oldp = ops.vm.create_vinfo()
         oldp.add_path(self.PATH_SRC + '/parent1')
         vinfo = ops.vm.create_vinfo()
@@ -529,7 +530,7 @@ class TestFuseFS(unittest.TestCase):
     @patch('fusebox.fusefs.os.unlink')
     def test_unlink_permission(self, mock_unlink):
         ops = self.ops
-        ops.auditor.permission_write_paths.append(self.PATH_SRC + '/parent1')
+        ops.auditor.denywrite(self.PATH_SRC + '/parent1')
         vinfo_p = ops.vm.create_vinfo()
         vinfo_p.add_path(self.PATH_SRC + '/parent1')
         vinfo = ops.vm.create_vinfo()

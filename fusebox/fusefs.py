@@ -5,7 +5,7 @@ import stat
 import pyfuse3
 import logging
 import faulthandler
-from fusebox.auditor import Auditor
+from fusebox.auditor import Auditor, Permission, Order
 from fusebox.vnode import VnodeManager, FD
 
 faulthandler.enable()
@@ -335,14 +335,39 @@ class Fusebox(pyfuse3.Operations):
             _opslog.debug('ORDER: <{}>\t\tARGS: <{}>'.format(match.group('order'), match.group('args')))
             order = match.group('order').upper()
             path = os.path.abspath(match.group('args'))
+
             if not os.path.lexists(path):
                 _opslog.warning('Given PATH <{}> does not exists.'.format(path))
-            if order == 'ALLOWREAD':
-                self.auditor.permission_read_paths.append(path)
-                _opslog.info('Permited reading from path <{}>.'.format(path))
+
+            if order == 'ALLOWREAD' or order == 'ADDREAD':
+                self.auditor.allowread(path)
+                _opslog.info('Permitted reading from path <{}>.'.format(path))
+
             elif order == 'ALLOWWRITE':
-                self.auditor.permission_write_paths.append(path)
-                _opslog.info('Permited writing to path <{}>.'.format(path))
+                self.auditor.allowwrite(path)
+                _opslog.info('Permitted writing to path <{}>.'.format(path))
+
+            elif order == 'DENYREAD':
+                self.auditor.denyread(path)
+                _opslog.info('Prohibited reading to path <{}>.'.format(path))
+
+            elif order == 'DENYWRITE':
+                self.auditor.denywrite(path)
+                _opslog.info('Prohibited writing to path <{}>.'.format(path))
+
+            elif order == 'ADDWRITE':
+                self.auditor.allowread(path)
+                self.auditor.allowwrite(path)
+                _opslog.info('Permitted reading/writing to path <{}>.'.format(path))
+
+            elif order == 'ADDDENNY':
+                self.auditor.denyread(path)
+                self.auditor.denywrite(path)
+                _opslog.info('Prohibited reading/writing to path <{}>.'.format(path))
+
+            elif order == 'ADDPREDICT':
+                _opslog.warning('ORDER <{}>\twith ARGS <{}> is not supported for now. Ignored.'.format(order, path))
+
             else:
                 _opslog.warning('Unknown ORDER <{}>\twith ARGS <{}>. Ignored.'.format(order, path))
 

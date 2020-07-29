@@ -43,8 +43,15 @@ The sandbox currently used in the Portage package system hooks up writes to the 
 1. To give permission, you can write pseudo file as `fuseboxctlv1` in the mountpoint.
    Syntax is like below.
    ```
-   allowread /etc/os-release
+   allowread /etc/os-release (same as addread)
    allowwrite /etc/os-release
+   denyread /etc/os-release
+   denywrite /etc/os-release
+   
+   # for the compatible
+   addread /etc/os-release
+   addwrite /etc/os-release (same as allowread + allowwrite)
+   adddeny /etc/os-release (same as denyread + denywrite)
    ```
    (FYI: If you want to chroot, please grant permission to /bin, /usr, /etc, /lib64)
 
