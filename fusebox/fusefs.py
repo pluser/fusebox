@@ -387,6 +387,8 @@ class Fusebox(pyfuse3.Operations):
         vinfo_new_p = self.vm[vnode_new_parent]
         path = self.vm.make_path(vinfo_new_p.path, name_new)
         vinfo = self.vm[vnode]
+        if not self.auditor.ask_writable(path):
+            raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
         try:
             os.link(self.vm[vnode].path, path, follow_symlinks=False)
         except OSError as exc:
