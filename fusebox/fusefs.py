@@ -370,6 +370,8 @@ class Fusebox(pyfuse3.Operations):
         vinfo_new_p = self.vm[vnode_new_parent]
         path_old = self.vm.make_path(vinfo_old_p.path, name_old)
         path_new = self.vm.make_path(vinfo_new_p.path, name_new)
+        if not self.auditor.ask_writable(path_new):
+            raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
         try:
             os.rename(path_old, path_new)
         except OSError as exc:
