@@ -402,6 +402,8 @@ class Fusebox(pyfuse3.Operations):
         vinfo_p = self.vm[vnode_parent]
         path = self.vm.make_path(vinfo_p.path, name)
         vinfo = self.vm[path]
+        if not self.auditor.ask_writable(path):
+            raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
         try:
             os.unlink(path)
         except OSError as exc:

@@ -511,3 +511,34 @@ class TestFuseFS(unittest.TestCase):
         self.assertEqual(e.exception.args[0], errno.EACCES)
         mock_link.assert_not_called()
         self.assertNotIn(self.PATH_SRC + '/parent2/file2', vinfo.paths)
+
+    @patch('fusebox.fusefs.os.unlink')
+    def test_unlink_regular(self, mock_unlink):
+        ops = self.ops
+        vinfo_p = ops.vm.create_vinfo()
+        vinfo_p.add_path(self.PATH_SRC + '/parent1')
+        vinfo = ops.vm.create_vinfo()
+        vinfo.add_path(self.PATH_SRC + '/parent1/file1')
+        vinfo.add_path(self.PATH_SRC + '/parent1/file2')
+        ctx = MagicMock()
+        self._exec(ops.unlink, vinfo_p.vnode, os.fsencode('file1'), ctx)
+        mock_unlink.assert_called_with(self.PATH_SRC + '/parent1/file1')
+        self.assertIn(self.PATH_SRC + '/parent1/file2', vinfo.paths)
+        self.assertNotIn(self.PATH_SRC + '/parent1/file1', vinfo.paths)
+
+    @patch('fusebox.fusefs.os.unlink')
+    def test_unlink_permission(self, mock_unlink):
+        ops = self.ops
+        ops.auditor.permission_write_paths.append(self.PATH_SRC + '/parent1')
+        vinfo_p = ops.vm.create_vinfo()
+        vinfo_p.add_path(self.PATH_SRC + '/parent1')
+        vinfo = ops.vm.create_vinfo()
+        vinfo.add_path(self.PATH_SRC + '/parent1/file1')
+        vinfo.add_path(self.PATH_SRC + '/parent1/file2')
+        ctx = MagicMock()
+        with self.assertRaises(pyfuse3.FUSEError) as e:
+            self._exec(ops.unlink, vinfo_p.vnode, os.fsencode('file1'), ctx)
+        self.assertEqual(e.exception.args[0], errno.EACCES)
+        mock_unlink.assert_not_called()
+        self.assertIn(self.PATH_SRC + '/parent1/file1', vinfo.paths)
+        self.assertIn(self.PATH_SRC + '/parent1/file2', vinfo.paths)
