@@ -135,11 +135,14 @@ class Fusebox(pyfuse3.Operations):
 
     async def getxattr(self, vnode, name_enced, ctx):
         name = os.fsdecode(name_enced)
-        path = self.vm[vnode].path
-        try:
-            return os.getxattr(path, name)
-        except OSError as exc:
-            raise pyfuse3.FUSEError(exc.errno)
+        vinfo = self.vm[vnode]
+        if vinfo.virtual:
+            raise pyfuse3.FUSEError(errno.ENODATA)  # No data available
+        else:
+            try:
+                return os.getxattr(vinfo.path, name)
+            except OSError as exc:
+                raise pyfuse3.FUSEError(exc.errno)
 
     async def setxattr(self, vnode, name_enced, value_enced, ctx):
         name = os.fsdecode(name_enced)
