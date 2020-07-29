@@ -19,9 +19,9 @@ class TestFuseFS(unittest.TestCase):
         return trio.run(functools.partial(func, *args, **kwargs))
 
     def setUp(self):
-        self.patch_os_path_exists = patch('fusebox.fusefs.os.path.exists')
-        self.mock_os_path_exists = self.patch_os_path_exists.start()
-        self.mock_os_path_exists.return_value = True
+        self.patch_os_path_lexists = patch('fusebox.fusefs.os.path.lexists')
+        self.mock_os_path_lexists = self.patch_os_path_lexists.start()
+        self.mock_os_path_lexists.return_value = True
 
         self.patch_os_lstat = patch('fusebox.fusefs.os.lstat')
         self.mock_os_lstat = self.patch_os_lstat.start()
@@ -36,7 +36,7 @@ class TestFuseFS(unittest.TestCase):
     def tearDown(self):
         self.patch_os_path_isdir.stop()
         self.patch_os_lstat.stop()
-        self.patch_os_path_exists.stop()
+        self.patch_os_path_lexists.stop()
 
     @patch('fusebox.fusefs.os.lstat')
     @patch('fusebox.fusefs.os.path.isdir')

@@ -184,9 +184,11 @@ class Fusebox(pyfuse3.Operations):
     async def lookup(self, vnode_parent, name_enced, ctx=None):
         name = os.fsdecode(name_enced)
         path = self.vm.make_path(self.vm[vnode_parent].path, name)
-        vinfo = self.vm[path] if path in self.vm else self.vm.create_vinfo()
         _opslog.debug("lookup called with path: {}".format(path))
-        if not os.path.exists(path) and not vinfo.virtual:
+        if self._path_mountpoint in (self.vm.make_path(p, name) for p in self.vm[vnode_parent].paths):
+            raise pyfuse3.FUSEError(errno.ENOENT)  # Response that mountpoint is not exists.
+        vinfo = self.vm[path] if path in self.vm else self.vm.create_vinfo()
+        if not os.path.lexists(path) and not vinfo.virtual:
             raise pyfuse3.FUSEError(errno.ENOENT)
         if name != '.' and name != '..':
             vinfo.add_path(path)
@@ -207,9 +209,11 @@ class Fusebox(pyfuse3.Operations):
             ent.append((attr.st_ino, name, attr))
         for name in pyfuse3.listdir(vinfo_p.path):
             if name == '.' or name == '..' or name == self.CONTROLLER_FILENAME:
-                continue
+                continue  # exclude pseudo files and directories
             if self._path_mountpoint in (self.vm.make_path(p, name) for p in vinfo_p.paths):
                 continue  # Don't include mountpoint itself to directory entry
+            if not os.path.lexists(self.vm.make_path(vinfo_p.path, name)):
+                continue  # listdir() returns invalid name for some reason. check if it exists and exclude it
             path = self.vm.make_path(vinfo_p.path, name)
             vinfo_tmp = self.vm[path] if path in self.vm else self.vm.create_vinfo()
             vinfo_tmp.add_path(path, inc_ref=False)
@@ -327,7 +331,7 @@ class Fusebox(pyfuse3.Operations):
             _opslog.debug('ORDER: <{}>\t\tARGS: <{}>'.format(match.group('order'), match.group('args')))
             order = match.group('order').upper()
             path = os.path.abspath(match.group('args'))
-            if not os.path.exists(path):
+            if not os.path.lexists(path):
                 _opslog.warning('Given PATH <{}> does not exists.'.format(path))
             if order == 'ALLOWREAD':
                 self.auditor.permission_read_paths.append(path)

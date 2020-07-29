@@ -8,14 +8,14 @@ class TestVnodeInfo(unittest.TestCase):
     TPATH = '/test/case/path'
 
     @classmethod
-    @patch('fusebox.vnode.os.path.exists', return_value=True)
+    @patch('fusebox.vnode.os.path.lexists', return_value=True)
     def configure_a(cls, manager, mock_mpe):
         vinfo = vnode.VnodeInfo(manager)
         vinfo.add_path(vnode.AbsPath(cls.TPATH + '1'))
         vinfo.add_path(vnode.AbsPath(cls.TPATH + '2'))
         return vinfo
 
-    @patch('fusebox.vnode.os.path.exists', return_value=True)
+    @patch('fusebox.vnode.os.path.lexists', return_value=True)
     def test_path(self, mock_ope):
         mock_vm = MagicMock()
         vinfo = self.configure_a(mock_vm)
@@ -26,7 +26,7 @@ class TestVnodeInfo(unittest.TestCase):
         vinfo = vnode.VnodeInfo(mock_vm)
         mock_vm.notify_vinfo_bind.assert_called_with(vinfo)
 
-    @patch('fusebox.vnode.os.path.exists', return_value=True)
+    @patch('fusebox.vnode.os.path.lexists', return_value=True)
     def test_add_path(self, mock_ope):
         mock_vm = MagicMock()
         vinfo = vnode.VnodeInfo(mock_vm)
@@ -63,13 +63,13 @@ class TestVnodeInfo(unittest.TestCase):
     def test_clean_mapping(self):
         mock_vm = MagicMock()
         vinfo = self.configure_a(mock_vm)
-        with patch('fusebox.vnode.os.path.exists', return_value=True) as mock_ope:
+        with patch('fusebox.vnode.os.path.lexists', return_value=True) as mock_ope:
             vinfo.cleanup_mapping()
             self.assertIn(self.TPATH + '1', vinfo.paths)
             self.assertIn(self.TPATH + '1', vinfo.paths)
             mock_vm.notify_path_remove.assert_not_called()
         mock_vm.reset_mock()
-        with patch('fusebox.vnode.os.path.exists') as mock_ope:
+        with patch('fusebox.vnode.os.path.lexists') as mock_ope:
             mock_ope.side_effect = lambda p: True if p == self.TPATH + '1' else False
             vinfo.cleanup_mapping()
             self.assertIn(self.TPATH + '1', vinfo.paths)
@@ -77,7 +77,7 @@ class TestVnodeInfo(unittest.TestCase):
             self.assertEqual(vinfo.refcount, 2)
             mock_vm.notify_path_remove_with(vinfo, self.TPATH + '2')
 
-    @patch('fusebox.vnode.os.path.exists', return_value=True)
+    @patch('fusebox.vnode.os.path.lexists', return_value=True)
     def test_forget_reference(self, mock_ope):
         mock_vm = MagicMock()
         vinfo = self.configure_a(mock_vm)

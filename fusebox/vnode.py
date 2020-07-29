@@ -81,7 +81,7 @@ class VnodeInfo:
             return
         for p in self._paths.copy():
             p = os.path.abspath(p)
-            if not os.path.exists(p):
+            if not os.path.lexists(p):  # don't remove vnode even if given p is symlink and it's broken
                 self._paths.remove(p)
                 self.manager.notify_path_remove(self, p)
 
