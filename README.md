@@ -46,6 +46,7 @@ The sandbox currently used in the Portage package system hooks up writes to the 
    allowread /etc/os-release
    allowwrite /etc/os-release
    ```
+   (FYI: If you want to chroot, please grant permission to /bin, /usr, /etc, /lib64)
 
 ### Export to logfile
 1. Please use logfile option.
