@@ -321,6 +321,9 @@ class Fusebox(pyfuse3.Operations):
         buf = buf.decode('utf-8')
         for l in buf.splitlines():
             match = re.fullmatch(r'^(?P<order>\w+)\s(?P<args>.*)$', l)
+            if not match:
+                _opslog.warning('Invalid Syntax. Input: <{}>'.format(l))
+                return
             _opslog.debug('ORDER: <{}>\t\tARGS: <{}>'.format(match.group('order'), match.group('args')))
             order = match.group('order').upper()
             path = os.path.abspath(match.group('args'))
