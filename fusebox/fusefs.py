@@ -444,6 +444,9 @@ class Fusebox(pyfuse3.Operations):
         vinfo = self.vm[vnode]
         if not self.auditor.ask_writable(path):
             raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
+        if self.auditor.ask_discard(path):
+            _acslog.info('LINK-FAKE: {}'.format(path))
+            return self._getattr(self.vinfo_null)
         try:
             os.link(self.vm[vnode].path, path, follow_symlinks=False)
         except OSError as exc:
@@ -459,6 +462,9 @@ class Fusebox(pyfuse3.Operations):
         vinfo = self.vm[path]
         if not self.auditor.ask_writable(path):
             raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
+        if self.auditor.ask_discard(path):
+            _acslog.info('UNLINK-FAKE: {}'.format(path))
+            return
         try:
             os.unlink(path)
         except OSError as exc:

@@ -579,6 +579,21 @@ class TestFuseFS(unittest.TestCase):
         mock_link.assert_not_called()
         self.assertNotIn(self.PATH_SRC + '/parent2/file2', vinfo.paths)
 
+    @patch('fusebox.fusefs.os.link')
+    def test_link_discard(self, mock_link):
+        ops = self.ops
+        ops.auditor.discardwrite(self.PATH_SRC + '/parent2')
+        oldp = ops.vm.create_vinfo()
+        oldp.add_path(self.PATH_SRC + '/parent1')
+        vinfo = ops.vm.create_vinfo()
+        vinfo.add_path(self.PATH_SRC + '/parent1/file1')
+        newp = ops.vm.create_vinfo()
+        newp.add_path(self.PATH_SRC + '/parent2')
+        ctx = MagicMock()
+        self._exec(ops.link, vinfo.vnode, newp.vnode, os.fsencode('file2'), ctx)
+        mock_link.assert_not_called()
+        self.assertNotIn(self.PATH_SRC + '/parent2/file2', vinfo.paths)
+
     @patch('fusebox.fusefs.os.unlink')
     def test_unlink_regular(self, mock_unlink):
         ops = self.ops
@@ -609,3 +624,18 @@ class TestFuseFS(unittest.TestCase):
         mock_unlink.assert_not_called()
         self.assertIn(self.PATH_SRC + '/parent1/file1', vinfo.paths)
         self.assertIn(self.PATH_SRC + '/parent1/file2', vinfo.paths)
+
+    @patch('fusebox.fusefs.os.unlink')
+    def test_unlink_discard(self, mock_unlink):
+        ops = self.ops
+        ops.auditor.discardwrite(self.PATH_SRC + '/parent1/file1')
+        vinfo_p = ops.vm.create_vinfo()
+        vinfo_p.add_path(self.PATH_SRC + '/parent1')
+        vinfo = ops.vm.create_vinfo()
+        vinfo.add_path(self.PATH_SRC + '/parent1/file1')
+        vinfo.add_path(self.PATH_SRC + '/parent1/file2')
+        ctx = MagicMock()
+        self._exec(ops.unlink, vinfo_p.vnode, os.fsencode('file1'), ctx)
+        mock_unlink.assert_not_called()
+        self.assertIn(self.PATH_SRC + '/parent1/file2', vinfo.paths)
+        self.assertIn(self.PATH_SRC + '/parent1/file1', vinfo.paths)
