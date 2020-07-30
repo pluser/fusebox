@@ -41,7 +41,7 @@ class TestFuseFS(unittest.TestCase):
 
     @patch('fusebox.fusefs.os.lstat')
     @patch('fusebox.fusefs.os.path.isdir')
-    def test_init(self, mock_isdir, mock_lstat):
+    def test___init__(self, mock_isdir, mock_lstat):
         mock_isdir.return_value = True
         ops = fusefs.Fusebox(self.PATH_SRC, self.PATH_DST)
         return ops
