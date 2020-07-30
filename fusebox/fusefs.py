@@ -205,7 +205,8 @@ class Fusebox(pyfuse3.Operations):
 
     def _listdir(self, vinfo_p):
         ent = list()
-        if self._path_source in vinfo_p.paths:  # for pseudo file object
+        if self._path_source in vinfo_p.paths:
+            # insert controller file to directory entries
             name = self.CONTROLLER_FILENAME
             path = self.vm.make_path(vinfo_p.path, name)
             vinfo_tmp = self.vm[path] if path in self.vm else self.vm.create_vinfo()
@@ -250,6 +251,9 @@ class Fusebox(pyfuse3.Operations):
         path = self.vm.make_path(self.vm[vnode_parent].path, os.fsdecode(name))
         if not self.auditor.ask_writable(path):
             raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
+        if self.auditor.ask_discard(path):
+            _acslog.info('MKDIR-FAKE: {}'.format(path))
+            return self._getattr(self.vinfo_null)
         try:
             os.mkdir(path, mode=(mode & ~ctx.umask))
             os.chown(path, ctx.uid, ctx.gid)
@@ -265,6 +269,9 @@ class Fusebox(pyfuse3.Operations):
         vinfo = self.vm[path]
         if not self.auditor.ask_writable(path):
             raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
+        if self.auditor.ask_discard(path):
+            _acslog.info('RMDIR-FAKE: {}'.format(path))
+            return
         try:
             os.rmdir(path)
         except OSError as exc:
@@ -320,12 +327,12 @@ class Fusebox(pyfuse3.Operations):
             _opslog.info('Creating to PATH <{}> is not permitted.'.format(path))
             raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
         if self.auditor.ask_discard(path):
-            _opslog.info('Acting createing file: {}'.format(path))
             try:
                 fd = FD(os.open('/dev/null', flags & ~os.O_CREAT))
             except OSError as exc:
                 raise pyfuse3.FUSEError(exc.errno)
             self.vinfo_null.open_vnode(fd)
+            _acslog.info('CREATE-FAKE: {}'.format(path))
             return pyfuse3.FileInfo(fh=fd), self._getattr(self.vinfo_null)
 
         vinfo = self.vm.create_vinfo()
