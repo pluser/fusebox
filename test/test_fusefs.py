@@ -451,6 +451,15 @@ class TestFuseFS(unittest.TestCase):
         self.assertRaises(pyfuse3.FUSEError, self._exec, ops.create, vinfo_p.vnode, os.fsencode(ops.CONTROLLER_FILENAME), 0, 0, None)
         mock_open.assert_not_called()
 
+    @patch('fusebox.fusefs.os.open')
+    def test_create_discard(self, mock_open):
+        ops = self.ops
+        ops.auditor.discardwrite(self.PATH_SRC)
+        vinfo_p = ops.vm.create_vinfo()
+        vinfo_p.add_path(self.PATH_SRC + '/parent1')
+        self._exec(ops.create, vinfo_p.vnode, os.fsencode('child1'), 0, 0, None)
+        mock_open.assert_called_with('/dev/null', 0)
+
     @patch('fusebox.fusefs.os.lseek')
     @patch('fusebox.fusefs.os.write')
     def test_write_regular(self, mock_write, mock_seek):

@@ -19,6 +19,7 @@ class Fusebox(pyfuse3.Operations):
     def __init__(self, path_source, path_dest):
         super().__init__()
         self.CONTROLLER_FILENAME = 'fuseboxctlv1'
+        self.BLACKHOLE_FILENAME = 'blackhole'
         self.vm = VnodeManager(path_source)
         self._path_source = os.path.abspath(path_source)
         self._path_mountpoint = os.path.abspath(path_dest)
@@ -30,9 +31,13 @@ class Fusebox(pyfuse3.Operations):
         self.stat_path_open_rw = set()
 
         # add pseudo file
-        vinfo = self.vm.create_vinfo()
-        vinfo.virtual = True
-        vinfo.add_path(self.vm.make_path(path_source, self.CONTROLLER_FILENAME))
+        self.vinfo_ctl = self.vm.create_vinfo()
+        self.vinfo_ctl.virtual = True
+        self.vinfo_ctl.add_path(self.vm.make_path(path_source, self.CONTROLLER_FILENAME))
+
+        self.vinfo_null = self.vm.create_vinfo()
+        self.vinfo_null.virtual = True
+        self.vinfo_null.add_path(self.vm.make_path(path_source, self.BLACKHOLE_FILENAME))
 
     # noinspection PyUnusedLocal
     async def statfs(self, ctx):
@@ -314,6 +319,14 @@ class Fusebox(pyfuse3.Operations):
         if not self.auditor.ask_writable(path):
             _opslog.info('Creating to PATH <{}> is not permitted.'.format(path))
             raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
+        if self.auditor.ask_discard(path):
+            _opslog.info('Acting createing file: {}'.format(path))
+            try:
+                fd = FD(os.open('/dev/null', flags & ~os.O_CREAT))
+            except OSError as exc:
+                raise pyfuse3.FUSEError(exc.errno)
+            self.vinfo_null.open_vnode(fd)
+            return pyfuse3.FileInfo(fh=fd), self._getattr(self.vinfo_null)
 
         vinfo = self.vm.create_vinfo()
         try:
