@@ -380,7 +380,7 @@ class TestFuseFS(unittest.TestCase):
         vinfo_p = ops.vm[self.PATH_SRC]
         ctx = MagicMock()
         ctx.umask = 0
-        self._exec(ops.mkdir, vinfo_p.vnode, os.fsencode('file1'), 12345, ctx)
+        retval = self._exec(ops.mkdir, vinfo_p.vnode, os.fsencode('file1'), 12345, ctx)
         mock_mkdir.assert_called_with(self.PATH_SRC + '/file1', mode=12345)
         mock_chown.assert_called_with(self.PATH_SRC + '/file1', ctx.uid, ctx.gid)
 
@@ -405,9 +405,11 @@ class TestFuseFS(unittest.TestCase):
         vinfo_p = ops.vm[self.PATH_SRC]
         ctx = MagicMock()
         ctx.umask = 0
-        self._exec(ops.mkdir, vinfo_p.vnode, os.fsencode('file1'), 12345, ctx)
+        retval = self._exec(ops.mkdir, vinfo_p.vnode, os.fsencode('file1'), 12345, ctx)
         mock_mkdir.assert_not_called()
         mock_chown.assert_not_called()
+        self.assertFalse(stat.S_ISREG(retval.st_mode))
+        self.assertTrue(stat.S_ISDIR(retval.st_mode))
 
     @patch('fusebox.fusefs.os.rmdir')
     def test_rmdir_regular(self, mock_rmdir):

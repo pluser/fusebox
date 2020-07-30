@@ -256,7 +256,10 @@ class Fusebox(pyfuse3.Operations):
             raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
         if self.auditor.ask_discard(path):
             _acslog.info('MKDIR-FAKE: {}'.format(path))
-            return self._getattr(self.vinfo_null)
+            attr = self._getattr(self.vinfo_null)
+            attr.st_mode &= ~stat.S_IFREG  # make sure this is not regular file
+            attr.st_mode |= stat.S_IFDIR  # make sure this is directory
+            return attr
         try:
             os.mkdir(path, mode=(mode & ~ctx.umask))
             os.chown(path, ctx.uid, ctx.gid)
