@@ -384,7 +384,7 @@ class Fusebox(pyfuse3.Operations):
                 self.auditor.allowwrite(path)
                 _opslog.info('Permitted reading/writing to path <{}>.'.format(path))
 
-            elif order == 'ADDDENNY':
+            elif order == 'ADDDENY':
                 self.auditor.denyread(path)
                 self.auditor.denywrite(path)
                 _opslog.info('Prohibited reading/writing to path <{}>.'.format(path))

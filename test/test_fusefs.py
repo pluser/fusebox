@@ -39,6 +39,55 @@ class TestFuseFS(unittest.TestCase):
         self.patch_os_lstat.stop()
         self.patch_os_path_lexists.stop()
 
+    def test__parse_command(self):
+        def enc(x):
+            return x.encode('utf-8')
+        ops = self.ops
+        with patch.object(ops, 'auditor') as mock_auditor:
+
+            ops._parse_command(enc('INVALID-ORDER /test/foo/bar'))
+            mock_auditor.assert_not_called()
+            mock_auditor.reset_mock()
+
+            ops._parse_command(enc('allowread /test'))
+            mock_auditor.allowread.assert_called_with('/test')
+            mock_auditor.reset_mock()
+
+            ops._parse_command(enc('allowwrite /test'))
+            mock_auditor.allowwrite.assert_called_with('/test')
+            mock_auditor.reset_mock()
+
+            ops._parse_command(enc('denyread /test'))
+            mock_auditor.denyread.assert_called_with('/test')
+            mock_auditor.reset_mock()
+
+            ops._parse_command(enc('denywrite /test'))
+            mock_auditor.denywrite.assert_called_with('/test')
+            mock_auditor.reset_mock()
+
+            ops._parse_command(enc('discardwrite /test'))
+            mock_auditor.discardwrite.assert_called_with('/test')
+            mock_auditor.reset_mock()
+
+            ops._parse_command(enc('addread /test'))
+            mock_auditor.allowread.assert_called_with('/test')
+            mock_auditor.reset_mock()
+
+            ops._parse_command(enc('addwrite /test'))
+            mock_auditor.allowread.assert_called_with('/test')
+            mock_auditor.allowwrite.assert_called_with('/test')
+            mock_auditor.reset_mock()
+
+            ops._parse_command(enc('adddeny /test'))
+            mock_auditor.denyread.assert_called_with('/test')
+            mock_auditor.denywrite.assert_called_with('/test')
+            mock_auditor.reset_mock()
+
+            ops._parse_command(enc('addpredict /test'))
+            mock_auditor.allowread.assert_called_with('/test')
+            mock_auditor.discardwrite.assert_called_with('/test')
+            mock_auditor.reset_mock()
+
     @patch('fusebox.fusefs.os.lstat')
     @patch('fusebox.fusefs.os.path.isdir')
     def test___init__(self, mock_isdir, mock_lstat):
