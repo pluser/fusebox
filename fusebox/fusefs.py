@@ -114,6 +114,9 @@ class Fusebox(pyfuse3.Operations):
             chown = os.fchown
             fstat = os.fstat
 
+        if vinfo.virtual:
+            return self._getattr(self.vinfo_null)
+
         try:
             if needs.update_size:
                 trunc(pofd, attr.st_size)
@@ -400,16 +403,15 @@ class Fusebox(pyfuse3.Operations):
     async def write(self, fd, offset, buf):
         _acslog.info('WRITE: {}'.format(self.vm.get(fd=fd).path))
         vinfo = self.vm.get(fd=fd)
-        if vinfo.virtual:
+        if vinfo.virtual and vinfo.path == self.vm.make_path(self._path_source, self.CONTROLLER_FILENAME):
             self._parse_command(buf)
             return len(buf)
+        if self.auditor.ask_discard(vinfo.path):
+            # FIXME: Can't check needs of discard certainly since fd doesn't have path info
+            return len(buf)  # throwing away inputs
         else:
-            if self.auditor.ask_discard(vinfo.path):
-                # FIXME: Can't check needs of discard certainly since fd doesn't have path info
-                return len(buf)  # throwing away inputs
-            else:
-                os.lseek(fd, offset, os.SEEK_SET)
-                return os.write(fd, buf)
+            os.lseek(fd, offset, os.SEEK_SET)
+            return os.write(fd, buf)
 
     async def release(self, fd):
         try:

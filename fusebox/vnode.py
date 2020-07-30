@@ -90,7 +90,7 @@ class VnodeInfo:
         assert not self._fds  # vinfo must not be opened.
         assert ref_count > 0
         self.refcount -= ref_count
-        if self.refcount <= 0:
+        if self.refcount <= 0 and not self.virtual:
             self.manager.notify_vinfo_unbind(self)
 
     def open_vnode(self, fd: FD) -> None:

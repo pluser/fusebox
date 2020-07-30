@@ -549,7 +549,7 @@ class TestFuseFS(unittest.TestCase):
         ops = self.ops
         vinfo = ops.vm.create_vinfo()
         vinfo.virtual = True
-        vinfo.add_path(self.PATH_SRC + '/file1')
+        vinfo.add_path(ops.vm.make_path(self.PATH_SRC, ops.CONTROLLER_FILENAME))
         vinfo.open_vnode(123)
         length = self._exec(ops.write, 123, 0, 'foobar_buffer')
         mock_parser.assert_called_with('foobar_buffer')
