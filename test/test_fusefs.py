@@ -48,7 +48,7 @@ class TestFuseFS(unittest.TestCase):
 
     @patch('fusebox.fusefs.pyfuse3.EntryAttributes')
     def test__getattr_normal(self, mock_entatt):
-        ops = self.test_init()
+        ops = self.ops
         vinfo_a = ops.vm.create_vinfo()
         vinfo_a.add_path('/test/root/file1')
         vinfo_mp = ops.vm.create_vinfo()
@@ -64,7 +64,7 @@ class TestFuseFS(unittest.TestCase):
 
     @patch('fusebox.fusefs.pyfuse3.EntryAttributes')
     def test__getattr_virtual(self, mock_entatt):
-        ops = self.test_init()
+        ops = self.ops
         vinfo_a = ops.vm.create_vinfo()
         vinfo_a.add_path(self.PATH_SRC + '/fuseboxctl')
         vinfo_a.virtual = True
@@ -83,7 +83,7 @@ class TestFuseFS(unittest.TestCase):
 
     @patch('fusebox.fusefs.os.lstat')
     def setup_setattr(self, *_):
-        ops = self.test_init()
+        ops = self.ops
         vinfo = ops.vm.create_vinfo()
         vinfo.add_path(self.PATH_SRC + '/file1')
         vinfo.open_vnode(7)
@@ -282,7 +282,7 @@ class TestFuseFS(unittest.TestCase):
 
     @patch('fusebox.fusefs.os.lstat')
     def test_lookup(self, mock_lstat):
-        ops = self.test_init()
+        ops = self.ops
         vinfo_a = ops.vm.create_vinfo()
         vinfo_a.add_path(self.PATH_SRC + '/dir1')
         vinfo_b = ops.vm.create_vinfo()
@@ -311,7 +311,7 @@ class TestFuseFS(unittest.TestCase):
     @patch('fusebox.fusefs.pyfuse3.listdir')
     @patch('fusebox.fusefs.pyfuse3.readdir_reply')
     def test_readdir_virtual(self, mock_pfrep, mock_listdir, mock_getattr):
-        ops = self.test_init()
+        ops = self.ops
         vinfo_parent = ops.vm.create_vinfo()
         vinfo_parent.add_path(self.PATH_SRC)
         mock_listdir.assert_not_called()
@@ -395,7 +395,7 @@ class TestFuseFS(unittest.TestCase):
         mock_rmdir.assert_not_called()
 
     def test_open(self):
-        ops = self.test_init()
+        ops = self.ops
         vinfo_a = ops.vm.create_vinfo()
         vinfo_a.add_path(self.PATH_SRC + '/file1')
         with patch('fusebox.fusefs.os.open') as mock_open:
