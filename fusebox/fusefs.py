@@ -477,6 +477,11 @@ class Fusebox(pyfuse3.Operations):
         name_dst = os.fsdecode(dst_enced)
         vinfo_dst_p = self.vm[vnode_dst_parent]
         path_dst = self.vm.make_path(vinfo_dst_p.path, name_dst)
+        if not self.auditor.ask_writable(path_dst):
+            raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
+        if self.auditor.ask_discard(path_dst):
+            _acslog.info('SYMLINK-FAKE: {}'.format(path_dst))
+            return self._getattr(self.vinfo_null)
         try:
             os.symlink(name_src, path_dst)
             os.chown(path_dst, ctx.uid, ctx.gid, follow_symlinks=False)
@@ -484,4 +489,5 @@ class Fusebox(pyfuse3.Operations):
             raise pyfuse3.FUSEError(exc.errno)
         vinfo_dst = self.vm.create_vinfo()
         vinfo_dst.add_path(path_dst)
+        _acslog.info('SYMLINK: {}'.format(path_dst))
         return self._getattr(vinfo_dst)

@@ -688,3 +688,46 @@ class TestFuseFS(unittest.TestCase):
         mock_unlink.assert_not_called()
         self.assertIn(self.PATH_SRC + '/parent1/file2', vinfo.paths)
         self.assertIn(self.PATH_SRC + '/parent1/file1', vinfo.paths)
+
+    @patch('fusebox.fusefs.os.chown')
+    @patch('fusebox.fusefs.os.symlink')
+    def test_symlink_regular(self, mock_symlink, mock_chown):
+        ops = self.ops
+        vinfo = ops.vm.create_vinfo()
+        vinfo.add_path(self.PATH_SRC + '/file1')
+        vinfo_p = ops.vm.create_vinfo()
+        vinfo_p.add_path(self.PATH_SRC + '/dest1')
+        ctx = MagicMock()
+        retval = self._exec(ops.symlink, vinfo_p.vnode, os.fsencode('file2'), os.fsencode(self.PATH_SRC + '/file1'), ctx)
+        mock_symlink.assert_called_with(self.PATH_SRC + '/file1', self.PATH_SRC + '/dest1/file2')
+        mock_chown.assert_called_with(self.PATH_SRC + '/dest1/file2', ctx.uid, ctx.gid, follow_symlinks=False)
+        self.assertIsInstance(retval, pyfuse3.EntryAttributes)
+
+    @patch('fusebox.fusefs.os.chown')
+    @patch('fusebox.fusefs.os.symlink')
+    def test_symlink_permission(self, mock_symlink, mock_chown):
+        ops = self.ops
+        ops.auditor.denywrite(self.PATH_SRC + '/dest1')
+        vinfo = ops.vm.create_vinfo()
+        vinfo.add_path(self.PATH_SRC + '/file1')
+        vinfo_p = ops.vm.create_vinfo()
+        vinfo_p.add_path(self.PATH_SRC + '/dest1')
+        ctx = MagicMock()
+        with self.assertRaises(pyfuse3.FUSEError) as e:
+            self._exec(ops.symlink, vinfo_p.vnode, os.fsencode('file2'), os.fsencode(self.PATH_SRC + '/file1'), ctx)
+        self.assertEqual(e.exception.args[0], errno.EACCES)  # Permission denied
+
+    @patch('fusebox.fusefs.os.chown')
+    @patch('fusebox.fusefs.os.symlink')
+    def test_symlink_discard(self, mock_symlink, mock_chown):
+        ops = self.ops
+        ops.auditor.discardwrite(self.PATH_SRC + '/dest1')
+        vinfo = ops.vm.create_vinfo()
+        vinfo.add_path(self.PATH_SRC + '/file1')
+        vinfo_p = ops.vm.create_vinfo()
+        vinfo_p.add_path(self.PATH_SRC + '/dest1')
+        ctx = MagicMock()
+        retval = self._exec(ops.symlink, vinfo_p.vnode, os.fsencode('file2'), os.fsencode(self.PATH_SRC + '/file1'), ctx)
+        mock_symlink.assert_not_called()
+        mock_chown.assert_not_called()
+        self.assertIsInstance(retval, pyfuse3.EntryAttributes)
