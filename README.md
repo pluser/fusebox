@@ -53,7 +53,7 @@ The sandbox currently used in the Portage package system hooks up writes to the 
    addread /etc/os-release (same as allowread)
    addwrite /etc/os-release (same as allowread + allowwrite)
    adddeny /etc/os-release (same as denyread + denywrite)
-   addpredict /etc/os-release (same as discardwrite)
+   addpredict /etc/os-release (same as allowread + discardwrite)
    ```
    (FYI: If you want to chroot, please grant permission to /bin, /usr, /etc, /lib64)
 
