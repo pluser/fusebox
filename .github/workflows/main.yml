@@ -16,26 +16,28 @@ jobs:
     - uses: actions/checkout@v2
     - name: Make cache directory
       run: mkdir -p ./.cache/distfiles ./.cache/binpkgs
-    - name: Cache distfiles for portage
-      uses: actions/cache@v1
-      env:
-        cache-name: cache-portage-distfiles
+    - name: Cache for the Portage
+      uses: actions/cache@v2.1.0
       with:
-        path: ./.cache/distfiles
-        key:  ${{ runner.os }}-build-${{ env.cache-name }}-${{ github.sha }}
-    - name: Cache binpkgs for portage
-      uses: actions/cache@v1
-      env:
-        cache-name: cache-portage-binpkgs
-      with:
-        path: ./.cache/binpkgs
-        key:  ${{ runner.os }}-build-${{ env.cache-name }}-${{ github.sha }}
-    - name: Build environment
-      run: DOCKER_BUILDKIT=1 docker build . -t testenv
+        path: |
+          ./.cache/distfiles
+          ./.cache/binpkgs
+          ./.cache/docker-testenv.tar
+        key: ${{ runner.os }}-gentoo-test-${{ github.sha }}
+        restore-keys: ${{ runner.os }}-gentoo-test-
+    - name: Restore Docker image
+      shell: bash
+      run: if [[ -e ./.cache/docker-testenv.tar ]]; then docker load --input ./.cache/docker-testenv.tar; fi
+    - name: Build Docker image
+      run: DOCKER_BUILDKIT=1 docker build . -t fusebox-testenv
+    - name: Save Docker image
+      run: |
+        image_ids=$(docker history -q fusebox-testenv | grep -v '<missing>')
+        docker save --output ./.cache/docker-testenv.tar ${image_ids}
     - name: Kick test script
       run: |
         docker run \
         --mount type=bind,src=$(pwd),dst=/fusebox \
         --mount type=bind,src=$(pwd)/.cache/distfiles,dst=/var/cache/distfiles \
         --mount type=bind,src=$(pwd)/.cache/binpkgs,dst=/var/cache/binpkgs \
-        testenv bash /fusebox/testkicker.sh
+        fusebox-testenv bash /fusebox/testkicker.sh
