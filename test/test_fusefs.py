@@ -376,46 +376,74 @@ class TestFuseFS(unittest.TestCase):
             mock_open.side_effect = OSError(errno.ENOENT, 'Artifact Error')
             mock_open.return_value = 7
             self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_RDONLY, None)
-        with patch('fusebox.fusefs.os.open') as mock_open:
+        with patch('fusebox.fusefs.os.open') as mock_open, \
+             patch.object(ops.auditor, 'ask_readable') as mock_readable, \
+             patch.object(ops.auditor, 'ask_writable') as mock_writable, \
+             patch.object(ops.auditor, 'ask_discard') as mock_discard:
             mock_open.return_value = 7
-            with patch.object(ops.auditor, 'ask_readable') as mock_readable, \
-                 patch.object(ops.auditor, 'ask_writable') as mock_writable:
-                mock_readable.return_value = True
-                mock_writable.return_value = False
-                finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_RDONLY, None)
-                self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
-                self.assertEqual(finfo_a.fh, mock_open.return_value)
-                self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_WRONLY, None)
-                self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_RDWR, None)
-            with patch.object(ops.auditor, 'ask_readable') as mock_readable, \
-                 patch.object(ops.auditor, 'ask_writable') as mock_writable:
-                mock_readable.return_value = False
-                mock_writable.return_value = False
-                self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_RDONLY, None)
-                self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_WRONLY, None)
-                self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_RDWR, None)
-            with patch.object(ops.auditor, 'ask_readable') as mock_readable, \
-                 patch.object(ops.auditor, 'ask_writable') as mock_writable:
-                mock_readable.return_value = False
-                mock_writable.return_value = True
-                self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_RDONLY, None)
-                finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_WRONLY, None)
-                self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
-                self.assertEqual(finfo_a.fh, mock_open.return_value)
-                self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_RDWR, None)
-            with patch.object(ops.auditor, 'ask_readable') as mock_readable, \
-                 patch.object(ops.auditor, 'ask_writable') as mock_writable:
-                mock_readable.return_value = True
-                mock_writable.return_value = True
-                finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_RDONLY, None)
-                self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
-                self.assertEqual(finfo_a.fh, mock_open.return_value)
-                finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_WRONLY, None)
-                self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
-                self.assertEqual(finfo_a.fh, mock_open.return_value)
-                finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_RDWR, None)
-                self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
-                self.assertEqual(finfo_a.fh, mock_open.return_value)
+
+            mock_open.reset_mock()
+            mock_readable.return_value = True
+            mock_writable.return_value = False
+            mock_discard.return_value = False
+            finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_RDONLY, None)
+            self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
+            self.assertEqual(finfo_a.fh, mock_open.return_value)
+            self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_WRONLY, None)
+            self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_RDWR, None)
+
+            mock_open.reset_mock()
+            mock_readable.return_value = False
+            mock_writable.return_value = False
+            self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_RDONLY, None)
+            self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_WRONLY, None)
+            self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_RDWR, None)
+
+            mock_open.reset_mock()
+            mock_readable.return_value = False
+            mock_writable.return_value = True
+            self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_RDONLY, None)
+            finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_WRONLY, None)
+            self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
+            self.assertEqual(finfo_a.fh, mock_open.return_value)
+            self.assertRaises(pyfuse3.FUSEError, self._exec, ops.open, vinfo_a.vnode, os.O_RDWR, None)
+
+            mock_open.reset_mock()
+            mock_readable.return_value = True
+            mock_writable.return_value = True
+            finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_RDONLY, None)
+            self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
+            self.assertEqual(finfo_a.fh, mock_open.return_value)
+            finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_WRONLY, None)
+            self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
+            self.assertEqual(finfo_a.fh, mock_open.return_value)
+            finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_RDWR, None)
+            self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
+            self.assertEqual(finfo_a.fh, mock_open.return_value)
+
+            mock_open.reset_mock()
+            mock_readable.return_value = True
+            mock_writable.return_value = True
+            mock_discard.return_value = True
+            finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_RDONLY, None)
+            self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
+            self.assertEqual(finfo_a.fh, mock_open.return_value)
+            mock_open.assert_called_with(vinfo_a.path, os.O_RDONLY)
+            mock_open.reset_mock()
+            finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_WRONLY, None)
+            self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
+            self.assertEqual(finfo_a.fh, mock_open.return_value)
+            mock_open.assert_called_with(vinfo_a.path, os.O_RDONLY)  # readonly even if opened with write mode
+            mock_open.reset_mock()
+            finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_RDWR, None)
+            self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
+            self.assertEqual(finfo_a.fh, mock_open.return_value)
+            mock_open.assert_called_with(vinfo_a.path, os.O_RDONLY)  # readonly even if opened with readwrite mode
+            mock_open.reset_mock()
+            finfo_a = self._exec(ops.open, vinfo_a.vnode, os.O_RDWR | os.O_TRUNC, None)
+            self.assertIsInstance(finfo_a, pyfuse3.FileInfo)
+            self.assertEqual(finfo_a.fh, mock_open.return_value)
+            mock_open.assert_called_with(vinfo_a.path, os.O_RDONLY)  # just readonly even if opened trunc mode
 
     @patch('fusebox.fusefs.os.open')
     def test_create_access_allowed(self, mock_open):
