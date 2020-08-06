@@ -10,7 +10,7 @@ class TestVnodeInfo(unittest.TestCase):
     @classmethod
     @patch('fusebox.vnode.os.path.lexists', return_value=True)
     def configure_a(cls, manager, mock_mpe):
-        vinfo = vnode.VnodeInfo(manager)
+        vinfo = vnode.VnodeInfoPhysical(manager)
         vinfo.add_path(vnode.AbsPath(cls.TPATH + '1'))
         vinfo.add_path(vnode.AbsPath(cls.TPATH + '2'))
         return vinfo
@@ -114,9 +114,9 @@ class TestVnodeManager(unittest.TestCase):
         mock_os.path.exists.return_value = True
         mock_os.path.abspath = os.path.abspath
         vm = vnode.VnodeManager(cls.RPATH)
-        vinfo_a = vm.create_vinfo()
+        vinfo_a = vm.create_vinfo_physical()
         vinfo_a.add_path(cls.RPATH + '2')
-        vinfo_b = vm.create_vinfo()
+        vinfo_b = vm.create_vinfo_physical()
         vinfo_b.add_path(cls.RPATH + '3')
         vinfo_b.open_vnode(5)
         return vm, vinfo_a, vinfo_b
@@ -169,7 +169,7 @@ class TestVnodeManager(unittest.TestCase):
 
     def test_create_vinfo(self):
         vm, *_ = self.configure_a()
-        self.assertIsInstance(vm.create_vinfo(), vnode.VnodeInfo)
+        self.assertIsInstance(vm.create_vinfo_physical(), vnode.VnodeInfo)
 
     @patch('fusebox.vnode.os')
     def test_vinfo_bind(self, mock_os):

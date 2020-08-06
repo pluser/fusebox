@@ -64,6 +64,10 @@ class Auditor():
         else:
             return False
 
+    def clearall(self) -> None:
+        self.permission_read.clear()
+        self.permission_write.clear()
+
     def allowread(self, path: str) -> None:
         self.permission_read.append(Permission(Order.ALLOW, path))
 

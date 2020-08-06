@@ -1,14 +1,16 @@
 import typing as typ
+from abc import ABC
+from collections import namedtuple
 import pyfuse3
 import os
-import errno
+import stat
 
 AbsPath = typ.NewType('AbsPath', str)
 Vnode = typ.NewType('Vnode', int)
 FD = typ.NewType('FD', int)
 
 
-class VnodeInfo:
+class VnodeInfo(ABC):
     def __init__(self, manager: 'VnodeManager') -> None:
         """Create new VnodeInfo. Register to the container"""
         super().__init__()
@@ -16,7 +18,6 @@ class VnodeInfo:
         self._paths: typ.Set[AbsPath] = set()
         self._fds: typ.Set[FD] = set()
         self.refcount: int = 0
-        self.virtual: bool = False  # indicate this backend file not exists. Used for pseudo files.
 
         self.vnode: Vnode = Vnode(manager.payout_vnode_num())
         self.manager.notify_vinfo_bind(self)
@@ -32,25 +33,35 @@ class VnodeInfo:
         return 'vinfo-{} path:{}'.format(self.vnode, next(iter(self._paths)))
 
     @property
+    def virtual(self) -> bool:
+        return isinstance(self, VnodeInfoVirtual)
+
+    @property
     def opencount(self) -> int:
         return len(self._fds)
 
     @property
     def paths(self) -> typ.Set[AbsPath]:
         """Returns sort of absolute paths which is related in the vnode"""
-        self.cleanup_mapping()
         return self._paths.copy()
 
     @property
     def path(self) -> AbsPath:
         """Returns a representative absolute path which is related to the vnode"""
-        self.cleanup_mapping()
         return next(iter(self._paths))
 
     @property
     def fds(self) -> typ.Set[FD]:
         """Return a sort of file descriptor which is related in the vnode"""
         return self._fds.copy()
+
+    @property
+    def directory(self) -> bool:
+        raise NotImplementedError
+
+    @property
+    def file(self) -> bool:
+        raise NotImplementedError
 
     def add_path(self, path: AbsPath, inc_ref: bool = True) -> None:
         """Register the path. If inc_ref is False, keep reference counter."""
@@ -69,6 +80,55 @@ class VnodeInfo:
         if len(self._paths):
             self.manager.notify_vinfo_unbind(self)
 
+    def open_vnode(self, fd: FD) -> None:
+        """Notifying file descriptor was opened"""
+        self._fds.add(fd)
+        self.manager.notify_fd_open(self, fd)
+
+    def close_vnode(self, fd: FD) -> None:
+        """Notifying file descriptor was closed"""
+        self._fds.remove(fd)
+        self.manager.notify_fd_close(self, fd)
+
+    def forget_reference(self, ref_count: int) -> None:
+        """Decrements reference counter and remove from memory if no one reference it"""
+        raise NotImplementedError
+
+    def read(self, fd: int, offset: int, length: int) -> bytes:
+        raise NotImplementedError
+
+    def write(self, fd: int, offset: int, buf: bytes) -> int:
+        raise NotImplementedError
+
+    def listdir(self) -> typ.List[typ.Tuple[str, pyfuse3.EntryAttributes]]:
+        raise NotImplementedError
+
+    def getattr(self) -> pyfuse3.EntryAttributes:
+        raise NotImplementedError
+
+
+class VnodeInfoPhysical(VnodeInfo):
+    def __init__(self, manager: 'VnodeManager') -> None:
+        """Create new VnodeInfo. Register to the container"""
+        super().__init__(manager)
+
+    @property
+    def paths(self) -> typ.Set[AbsPath]:
+        """Returns sort of absolute paths which is related in the vnode"""
+        self.cleanup_mapping()
+        return self._paths.copy()
+
+    @property
+    def path(self) -> AbsPath:
+        """Returns a representative absolute path which is related to the vnode"""
+        self.cleanup_mapping()
+        return next(iter(self._paths))
+
+    @property
+    def fds(self) -> typ.Set[FD]:
+        """Return a sort of file descriptor which is related in the vnode"""
+        return self._fds.copy()
+
     def cleanup_mapping(self) -> None:
         """Remove vnode mappings which is not exist in real FS
 
@@ -76,9 +136,6 @@ class VnodeInfo:
         i.e. the parent directory is renamed.
         This method will confirm mappings and delete if it was invalid.
         """
-        # avoid cleanup when the node is pseudo since file not exists actually.
-        if self.virtual:
-            return
         for p in self._paths.copy():
             p = os.path.abspath(p)
             if not os.path.lexists(p):  # don't remove vnode even if given p is symlink and it's broken
@@ -90,18 +147,95 @@ class VnodeInfo:
         assert not self._fds  # vinfo must not be opened.
         assert ref_count > 0
         self.refcount -= ref_count
-        if self.refcount <= 0 and not self.virtual:
+        if self.refcount <= 0:
             self.manager.notify_vinfo_unbind(self)
 
-    def open_vnode(self, fd: FD) -> None:
-        """Notifying file descriptor was opened"""
-        self._fds.add(fd)
-        self.manager.notify_fd_open(self, fd)
+    def read(self, fd: int, offset: int, length: int) -> bytes:
+        os.lseek(fd, offset, os.SEEK_SET)
+        return os.read(fd, length)
 
-    def close_vnode(self, fd: FD) -> None:
-        """Notifying file descriptor was closed"""
-        self._fds.remove(fd)
-        self.manager.notify_fd_close(self, fd)
+    def write(self, fd: int, offset: int, buf: bytes) -> int:
+        os.lseek(fd, offset, os.SEEK_SET)
+        return os.write(fd, buf)
+
+    def getattr(self) -> pyfuse3.EntryAttributes:
+        entry = pyfuse3.EntryAttributes()
+
+        try:
+            stat_ = os.lstat(self.path)
+        except OSError as exc:
+            raise pyfuse3.FUSEError(exc.errno)
+        # copy attrs from base FS.
+        for attr in ('st_mode', 'st_nlink', 'st_uid', 'st_gid', 'st_rdev',
+                     'st_size', 'st_atime_ns', 'st_mtime_ns', 'st_ctime_ns'):
+            setattr(entry, attr, getattr(stat_, attr))
+        entry.st_ino = self.vnode
+        entry.generation = 0
+        entry.entry_timeout = 0
+        entry.attr_timeout = 0
+        entry.st_blksize = 512
+        entry.st_blocks = ((entry.st_size+entry.st_blksize-1) // entry.st_blksize)
+
+        return entry
+
+    def listdir(self) -> typ.List[typ.Tuple[str, pyfuse3.EntryAttributes]]:
+        ent = list()
+        files = namedtuple('files', 'name attr')
+        for name in pyfuse3.listdir(self.path):
+            if name == '.' or name == '..':
+                continue  # exclude pseudo files and directories
+            #if self.vm.path_mountpoint in (self.manager.make_path(p, name) for p in self.paths):
+            #    continue  # Don't include mountpoint itself to directory entry
+            if not os.path.lexists(self.manager.make_path(self.path, name)):
+                continue  # listdir() returns invalid name for some reason. check if it exists and exclude it
+            path = self.manager.make_path(self.path, name)
+            vinfo_tmp = self.manager[path] if path in self.manager else self.manager.create_vinfo_physical()
+            vinfo_tmp.add_path(path, inc_ref=False)
+            attr = vinfo_tmp.getattr()
+            ent.append(files(name, attr))
+        return ent
+
+
+class VnodeInfoVirtual(VnodeInfo):
+    def __init__(self, manager: 'VnodeManager'):
+        super().__init__(manager)
+        # flags
+        self.readonly = True
+        self.persistent = True
+        self.filemode = None
+
+    @property
+    def directory(self) -> bool:
+        return stat.S_ISDIR(self.filemode)
+
+    @property
+    def file(self) -> bool:
+        return stat.S_ISREG(self.filemode)
+
+    def forget_reference(self, ref_count: int) -> None:
+        """Decrements reference counter and remove from memory if no one reference it"""
+        assert not self._fds  # vinfo must not be opened.
+        assert ref_count > 0
+        self.refcount -= ref_count
+
+    def _getattr_common(self) -> pyfuse3.EntryAttributes:
+        entry = pyfuse3.EntryAttributes()
+        entry.st_mode = self.filemode
+        entry.st_nlink = 1
+        entry.st_uid = 0
+        entry.st_gid = 0
+        entry.st_rdev = 0
+        entry.st_size = 0
+        entry.st_atime_ns = 0
+        entry.st_mtime_ns = 0
+        entry.st_ctime_ns = 0
+        entry.st_ino = self.vnode
+        entry.generation = 0
+        entry.entry_timeout = 0
+        entry.attr_timeout = 0
+        entry.st_blksize = 512
+        entry.st_blocks = 0
+        return entry
 
 
 class VnodeManager:
@@ -115,7 +249,7 @@ class VnodeManager:
         # install initial root vnode.
         if not os.path.isdir(root_path):
             raise RuntimeError
-        self._vnodes[pyfuse3.ROOT_INODE] = VnodeInfo(manager=self)
+        self._vnodes[pyfuse3.ROOT_INODE] = VnodeInfoPhysical(manager=self)
         self._vnodes[pyfuse3.ROOT_INODE].add_path(root_path)
         self._paths[root_path] = self._vnodes[pyfuse3.ROOT_INODE]
 
@@ -128,7 +262,8 @@ class VnodeManager:
             vinfo = self._get_vinfo_by_path(AbsPath(key))
         else:
             raise TypeError
-        vinfo.cleanup_mapping()
+        if isinstance(vinfo, VnodeInfoPhysical):
+            vinfo.cleanup_mapping()
         return vinfo
 
     def __contains__(self, item: typ.Union[Vnode, AbsPath]) -> bool:
@@ -170,7 +305,8 @@ class VnodeManager:
             vinfo = self._get_vinfo_by_fd(fd)
         else:
             raise RuntimeError
-        vinfo.cleanup_mapping()
+        if isinstance(vinfo, VnodeInfoPhysical):
+            vinfo.cleanup_mapping()
         return vinfo
 
     def notify_vinfo_bind(self, vinfo: VnodeInfo) -> None:
@@ -240,7 +376,12 @@ class VnodeManager:
         self.vnode_payout_max_num += 1
         return self.vnode_payout_max_num
 
-    def create_vinfo(self) -> VnodeInfo:
+    def create_vinfo_physical(self) -> VnodeInfoPhysical:
         """Create VnodeInfo and make under control of manager"""
-        vinfo = VnodeInfo(manager=self)
+        vinfo = VnodeInfoPhysical(manager=self)
+        return vinfo
+
+    def create_vinfo_virtual(self) -> VnodeInfoVirtual:
+        """Create VnodeInfo and make under control of manager"""
+        vinfo = VnodeInfoVirtual(manager=self)
         return vinfo

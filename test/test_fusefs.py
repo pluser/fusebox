@@ -39,51 +39,52 @@ class TestFuseFS(unittest.TestCase):
         self.patch_os_lstat.stop()
         self.patch_os_path_lexists.stop()
 
-    def test__parse_command(self):
+    def test_acl_command(self):
         def enc(x):
             return x.encode('utf-8')
         ops = self.ops
-        with patch.object(ops, 'auditor') as mock_auditor:
+        vinfo = ops.vm.get(path=ops.vm.make_path(ops.path_source, ops.CONTROLLER_FILENAME, 'acl'))
+        with patch.object(vinfo, 'auditor') as mock_auditor:
 
-            ops._parse_command(enc('INVALID-ORDER /test/foo/bar'))
+            vinfo.write(0, vinfo.getattr().st_size, enc('INVALID-ORDER /test/foo/bar'))
             mock_auditor.assert_not_called()
             mock_auditor.reset_mock()
 
-            ops._parse_command(enc('allowread /test'))
+            vinfo.write(0, vinfo.getattr().st_size, enc('allowread /test'))
             mock_auditor.allowread.assert_called_with('/test')
             mock_auditor.reset_mock()
 
-            ops._parse_command(enc('allowwrite /test'))
+            vinfo.write(0, vinfo.getattr().st_size, enc('allowwrite /test'))
             mock_auditor.allowwrite.assert_called_with('/test')
             mock_auditor.reset_mock()
 
-            ops._parse_command(enc('denyread /test'))
+            vinfo.write(0, vinfo.getattr().st_size, enc('denyread /test'))
             mock_auditor.denyread.assert_called_with('/test')
             mock_auditor.reset_mock()
 
-            ops._parse_command(enc('denywrite /test'))
+            vinfo.write(0, vinfo.getattr().st_size, enc('denywrite /test'))
             mock_auditor.denywrite.assert_called_with('/test')
             mock_auditor.reset_mock()
 
-            ops._parse_command(enc('discardwrite /test'))
+            vinfo.write(0, vinfo.getattr().st_size, enc('discardwrite /test'))
             mock_auditor.discardwrite.assert_called_with('/test')
             mock_auditor.reset_mock()
 
-            ops._parse_command(enc('addread /test'))
+            vinfo.write(0, vinfo.getattr().st_size, enc('addread /test'))
             mock_auditor.allowread.assert_called_with('/test')
             mock_auditor.reset_mock()
 
-            ops._parse_command(enc('addwrite /test'))
+            vinfo.write(0, vinfo.getattr().st_size, enc('addwrite /test'))
             mock_auditor.allowread.assert_called_with('/test')
             mock_auditor.allowwrite.assert_called_with('/test')
             mock_auditor.reset_mock()
 
-            ops._parse_command(enc('adddeny /test'))
+            vinfo.write(0, vinfo.getattr().st_size, enc('adddeny /test'))
             mock_auditor.denyread.assert_called_with('/test')
             mock_auditor.denywrite.assert_called_with('/test')
             mock_auditor.reset_mock()
 
-            ops._parse_command(enc('addpredict /test'))
+            vinfo.write(0, vinfo.getattr().st_size, enc('addpredict /test'))
             mock_auditor.allowread.assert_called_with('/test')
             mock_auditor.discardwrite.assert_called_with('/test')
             mock_auditor.reset_mock()
@@ -96,30 +97,19 @@ class TestFuseFS(unittest.TestCase):
         return ops
 
     @patch('fusebox.fusefs.pyfuse3.EntryAttributes')
-    def test__getattr_normal(self, mock_entatt):
+    def test_getattr_normal(self, mock_entatt):
         ops = self.ops
-        vinfo_a = ops.vm.create_vinfo()
+        vinfo_a = ops.vm.create_vinfo_physical()
         vinfo_a.add_path('/test/root/file1')
-        vinfo_mp = ops.vm.create_vinfo()
+        vinfo_mp = ops.vm.create_vinfo_physical()
         vinfo_mp.add_path(self.PATH_DST)
-        self.assertRaises(pyfuse3.FUSEError, ops._getattr, vinfo_mp)
+        self.assertRaises(pyfuse3.FUSEError, self._exec, ops.getattr, vinfo_mp.vnode)
         with patch('fusebox.fusefs.os.lstat') as mock_lstat:
             mock_lstat.side_effect = OSError(errno.ENOENT, 'Artifact Error')
-            self.assertRaises(pyfuse3.FUSEError, ops._getattr, vinfo_a)
+            self.assertRaises(pyfuse3.FUSEError, self._exec, ops.getattr, vinfo_a.vnode)
         with patch('fusebox.fusefs.os.lstat') as mock_lstat:
-            entry = ops._getattr(vinfo_a)
+            entry = self._exec(ops.getattr, vinfo_a.vnode)
             mock_lstat.assert_called_once_with(vinfo_a.path)
-            self.assertEqual(entry.st_ino, vinfo_a.vnode)
-
-    @patch('fusebox.fusefs.pyfuse3.EntryAttributes')
-    def test__getattr_virtual(self, mock_entatt):
-        ops = self.ops
-        vinfo_a = ops.vm.create_vinfo()
-        vinfo_a.add_path(self.PATH_SRC + '/fuseboxctl')
-        vinfo_a.virtual = True
-        with patch('fusebox.fusefs.os.lstat') as mock_lstat:
-            entry = ops._getattr(vinfo_a)
-            mock_lstat.assert_not_called()
             self.assertEqual(entry.st_ino, vinfo_a.vnode)
 
     class DefaultAttrDict(UserDict):
@@ -133,7 +123,7 @@ class TestFuseFS(unittest.TestCase):
     @patch('fusebox.fusefs.os.lstat')
     def setup_setattr(self, *_):
         ops = self.ops
-        vinfo = ops.vm.create_vinfo()
+        vinfo = ops.vm.create_vinfo_physical()
         vinfo.add_path(self.PATH_SRC + '/file1')
         vinfo.open_vnode(7)
         return ops, vinfo
@@ -332,9 +322,9 @@ class TestFuseFS(unittest.TestCase):
     @patch('fusebox.fusefs.os.lstat')
     def test_lookup(self, mock_lstat):
         ops = self.ops
-        vinfo_a = ops.vm.create_vinfo()
+        vinfo_a = ops.vm.create_vinfo_physical()
         vinfo_a.add_path(self.PATH_SRC + '/dir1')
-        vinfo_b = ops.vm.create_vinfo()
+        vinfo_b = ops.vm.create_vinfo_physical()
         vinfo_b.add_path(self.PATH_SRC + '/dir1/file1')
         attr = self._exec(ops.lookup, vinfo_a.vnode, os.fsencode('file1'))
         self.assertEqual(attr.st_ino, vinfo_b.vnode)
@@ -344,7 +334,7 @@ class TestFuseFS(unittest.TestCase):
     def test_readdir_normal(self, mock_pfrep, mock_listdir):
         ops = self.ops
         PARENT_DIR = self.PATH_SRC + '/other'
-        vinfo_parent = ops.vm.create_vinfo()
+        vinfo_parent = ops.vm.create_vinfo_physical()
         vinfo_parent.add_path(PARENT_DIR)
         mock_listdir.return_value = ['file1', 'file2']
         self._exec(ops.readdir, vnode=vinfo_parent.vnode, offset=0, token='ABCD')
@@ -356,22 +346,22 @@ class TestFuseFS(unittest.TestCase):
         self.assertIsInstance(entryattr, pyfuse3.EntryAttributes)
         self.assertEqual(vnodenum, ops.vm.get(path=PARENT_DIR + '/file2').vnode)
 
-    @patch('fusebox.fusefs.Fusebox._getattr')
-    @patch('fusebox.fusefs.pyfuse3.listdir')
-    @patch('fusebox.fusefs.pyfuse3.readdir_reply')
-    def test_readdir_virtual(self, mock_pfrep, mock_listdir, mock_getattr):
-        ops = self.ops
-        vinfo_parent = ops.vm.create_vinfo()
-        vinfo_parent.add_path(self.PATH_SRC)
-        mock_listdir.assert_not_called()
-        mock_getattr.return_value.st_ino = 2
-        self._exec(ops.readdir, vnode=vinfo_parent.vnode, offset=0, token='ABCD')
-        mock_listdir.assert_called_with(self.PATH_SRC)
-        mock_pfrep.assert_called_with(
-            'ABCD',
-            os.fsencode('fuseboxctlv1'),
-            mock_getattr.return_value,
-            ops.vm.get(path=ops.vm.make_path(self.PATH_SRC, 'fuseboxctlv1')).vnode)
+    # @patch('fusebox.vnode.VnodeInfoVirtual.getattr')
+    # @patch('fusebox.fusefs.pyfuse3.listdir')
+    # @patch('fusebox.fusefs.pyfuse3.readdir_reply')
+    # def test_readdir_virtual(self, mock_pfrep, mock_listdir, mock_getattr):
+    #     ops = self.ops
+    #     vinfo_parent = ops.vm.create_vinfo_virtual()
+    #     vinfo_parent.add_path(self.PATH_SRC)
+    #     mock_listdir.assert_not_called()
+    #     mock_getattr.return_value.st_ino = 2
+    #     self._exec(ops.readdir, vnode=vinfo_parent.vnode, offset=0, token='ABCD')
+    #     mock_listdir.assert_called_with(self.PATH_SRC)
+    #     mock_pfrep.assert_called_with(
+    #         'ABCD',
+    #         os.fsencode('fuseboxctlv1'),
+    #         mock_getattr.return_value,
+    #         ops.vm.get(path=ops.vm.make_path(self.PATH_SRC, 'fuseboxctlv1')).vnode)
 
     @patch('fusebox.fusefs.os.mkdir')
     @patch('fusebox.fusefs.os.chown')
@@ -415,7 +405,7 @@ class TestFuseFS(unittest.TestCase):
     def test_rmdir_regular(self, mock_rmdir):
         ops = self.ops
         vinfo_p = ops.vm[self.PATH_SRC]
-        vinfo = ops.vm.create_vinfo()
+        vinfo = ops.vm.create_vinfo_physical()
         vinfo.add_path(self.PATH_SRC + '/file1')
         ctx = MagicMock()
         self._exec(ops.rmdir, vinfo_p.vnode, os.fsencode('file1'), ctx)
@@ -426,7 +416,7 @@ class TestFuseFS(unittest.TestCase):
         ops = self.ops
         ops.auditor.denywrite(self.PATH_SRC + '/file1')
         vinfo_p = ops.vm[self.PATH_SRC]
-        vinfo = ops.vm.create_vinfo()
+        vinfo = ops.vm.create_vinfo_physical()
         vinfo.add_path(self.PATH_SRC + '/file1')
         ctx = MagicMock()
         with self.assertRaises(pyfuse3.FUSEError) as e:
@@ -439,7 +429,7 @@ class TestFuseFS(unittest.TestCase):
         ops = self.ops
         ops.auditor.discardwrite(self.PATH_SRC)
         vinfo_p = ops.vm[self.PATH_SRC]
-        vinfo = ops.vm.create_vinfo()
+        vinfo = ops.vm.create_vinfo_physical()
         vinfo.add_path(self.PATH_SRC + '/file1')
         ctx = MagicMock()
         self._exec(ops.rmdir, vinfo_p.vnode, os.fsencode('file1'), ctx)
@@ -447,7 +437,7 @@ class TestFuseFS(unittest.TestCase):
 
     def test_open(self):
         ops = self.ops
-        vinfo_a = ops.vm.create_vinfo()
+        vinfo_a = ops.vm.create_vinfo_physical()
         vinfo_a.add_path(self.PATH_SRC + '/file1')
         with patch('fusebox.fusefs.os.open') as mock_open:
             mock_open.side_effect = OSError(errno.ENOENT, 'Artifact Error')
@@ -497,7 +487,7 @@ class TestFuseFS(unittest.TestCase):
     @patch('fusebox.fusefs.os.open')
     def test_create_access_allowed(self, mock_open):
         ops = self.ops
-        vinfo_p = ops.vm.create_vinfo()
+        vinfo_p = ops.vm.create_vinfo_physical()
         vinfo_p.add_path(self.PATH_SRC + '/parent1')
         self._exec(ops.create, vinfo_p.vnode, os.fsencode('child1'), 0, 0, None)
         mock_open.assert_called_with(self.PATH_SRC + '/parent1/child1', os.O_CREAT | os.O_TRUNC, 0)
@@ -505,7 +495,7 @@ class TestFuseFS(unittest.TestCase):
     @patch('fusebox.fusefs.os.open')
     def test_create_access_prohibited(self, mock_open):
         ops = self.ops
-        vinfo_p = ops.vm.create_vinfo()
+        vinfo_p = ops.vm.create_vinfo_physical()
         vinfo_p.add_path(self.PATH_SRC + '/parent1')
 
         ops.auditor.denywrite(self.PATH_SRC + '/parent1/child1')
@@ -529,7 +519,7 @@ class TestFuseFS(unittest.TestCase):
     def test_create_discard(self, mock_open):
         ops = self.ops
         ops.auditor.discardwrite(self.PATH_SRC)
-        vinfo_p = ops.vm.create_vinfo()
+        vinfo_p = ops.vm.create_vinfo_physical()
         vinfo_p.add_path(self.PATH_SRC + '/parent1')
         self._exec(ops.create, vinfo_p.vnode, os.fsencode('child1'), 0, 0, None)
         mock_open.assert_called_with('/dev/null', 0)
@@ -538,7 +528,7 @@ class TestFuseFS(unittest.TestCase):
     @patch('fusebox.fusefs.os.write')
     def test_write_regular(self, mock_write, mock_seek):
         ops = self.ops
-        vinfo = ops.vm.create_vinfo()
+        vinfo = ops.vm.create_vinfo_physical()
         vinfo.add_path(self.PATH_SRC + '/file1')
         vinfo.open_vnode(123)
         length = self._exec(ops.write, 123, 0, 'foobar_buffer')
@@ -546,21 +536,10 @@ class TestFuseFS(unittest.TestCase):
         mock_write.assert_called_with(123, 'foobar_buffer')
         self.assertEqual(length, mock_write())
 
-    @patch('fusebox.fusefs.Fusebox._parse_command')
-    def test_write_pseudo(self, mock_parser):
-        ops = self.ops
-        vinfo = ops.vm.create_vinfo()
-        vinfo.virtual = True
-        vinfo.add_path(ops.vm.make_path(self.PATH_SRC, ops.CONTROLLER_FILENAME))
-        vinfo.open_vnode(123)
-        length = self._exec(ops.write, 123, 0, 'foobar_buffer')
-        mock_parser.assert_called_with('foobar_buffer')
-        self.assertEqual(length, len('foobar_buffer'))
-
     @patch('fusebox.fusefs.Auditor.ask_discard')
     def test_write_discard(self, mock_discard):
         ops = self.ops
-        vinfo = ops.vm.create_vinfo()
+        vinfo = ops.vm.create_vinfo_physical()
         vinfo.add_path(self.PATH_SRC + '/file1')
         vinfo.open_vnode(123)
         ops.auditor.discardwrite(self.PATH_SRC + '/file1')
@@ -571,11 +550,11 @@ class TestFuseFS(unittest.TestCase):
     @patch('fusebox.fusefs.os.rename')
     def test_rename_regular(self, mock_rename):
         ops = self.ops
-        oldp = ops.vm.create_vinfo()
+        oldp = ops.vm.create_vinfo_physical()
         oldp.add_path(self.PATH_SRC + '/parent1')
-        vinfo = ops.vm.create_vinfo()
+        vinfo = ops.vm.create_vinfo_physical()
         vinfo.add_path(self.PATH_SRC + '/parent1/file1')
-        newp = ops.vm.create_vinfo()
+        newp = ops.vm.create_vinfo_physical()
         newp.add_path(self.PATH_SRC + '/parent2')
         ctx = MagicMock()
         self._exec(ops.rename, oldp.vnode, os.fsencode('file1'), newp.vnode, os.fsencode('file2'), 12345, ctx)
@@ -586,11 +565,11 @@ class TestFuseFS(unittest.TestCase):
     def test_rename_permission(self, mock_rename):
         ops = self.ops
         ops.auditor.denywrite(self.PATH_SRC + '/parent2')
-        oldp = ops.vm.create_vinfo()
+        oldp = ops.vm.create_vinfo_physical()
         oldp.add_path(self.PATH_SRC + '/parent1')
-        vinfo = ops.vm.create_vinfo()
+        vinfo = ops.vm.create_vinfo_physical()
         vinfo.add_path(self.PATH_SRC + '/parent1/file1')
-        newp = ops.vm.create_vinfo()
+        newp = ops.vm.create_vinfo_physical()
         newp.add_path(self.PATH_SRC + '/parent2')
         ctx = MagicMock()
         with self.assertRaises(pyfuse3.FUSEError) as e:
@@ -602,11 +581,11 @@ class TestFuseFS(unittest.TestCase):
     @patch('fusebox.fusefs.os.link')
     def test_link_regular(self, mock_link):
         ops = self.ops
-        oldp = ops.vm.create_vinfo()
+        oldp = ops.vm.create_vinfo_physical()
         oldp.add_path(self.PATH_SRC + '/parent1')
-        vinfo = ops.vm.create_vinfo()
+        vinfo = ops.vm.create_vinfo_physical()
         vinfo.add_path(self.PATH_SRC + '/parent1/file1')
-        newp = ops.vm.create_vinfo()
+        newp = ops.vm.create_vinfo_physical()
         newp.add_path(self.PATH_SRC + '/parent2')
         ctx = MagicMock()
         self._exec(ops.link, vinfo.vnode, newp.vnode, os.fsencode('file2'), ctx)
@@ -617,11 +596,11 @@ class TestFuseFS(unittest.TestCase):
     def test_link_permission(self, mock_link):
         ops = self.ops
         ops.auditor.denywrite(self.PATH_SRC + '/parent2')
-        oldp = ops.vm.create_vinfo()
+        oldp = ops.vm.create_vinfo_physical()
         oldp.add_path(self.PATH_SRC + '/parent1')
-        vinfo = ops.vm.create_vinfo()
+        vinfo = ops.vm.create_vinfo_physical()
         vinfo.add_path(self.PATH_SRC + '/parent1/file1')
-        newp = ops.vm.create_vinfo()
+        newp = ops.vm.create_vinfo_physical()
         newp.add_path(self.PATH_SRC + '/parent2')
         ctx = MagicMock()
         with self.assertRaises(pyfuse3.FUSEError) as e:
@@ -634,11 +613,11 @@ class TestFuseFS(unittest.TestCase):
     def test_link_discard(self, mock_link):
         ops = self.ops
         ops.auditor.discardwrite(self.PATH_SRC + '/parent2')
-        oldp = ops.vm.create_vinfo()
+        oldp = ops.vm.create_vinfo_physical()
         oldp.add_path(self.PATH_SRC + '/parent1')
-        vinfo = ops.vm.create_vinfo()
+        vinfo = ops.vm.create_vinfo_physical()
         vinfo.add_path(self.PATH_SRC + '/parent1/file1')
-        newp = ops.vm.create_vinfo()
+        newp = ops.vm.create_vinfo_physical()
         newp.add_path(self.PATH_SRC + '/parent2')
         ctx = MagicMock()
         self._exec(ops.link, vinfo.vnode, newp.vnode, os.fsencode('file2'), ctx)
@@ -648,9 +627,9 @@ class TestFuseFS(unittest.TestCase):
     @patch('fusebox.fusefs.os.unlink')
     def test_unlink_regular(self, mock_unlink):
         ops = self.ops
-        vinfo_p = ops.vm.create_vinfo()
+        vinfo_p = ops.vm.create_vinfo_physical()
         vinfo_p.add_path(self.PATH_SRC + '/parent1')
-        vinfo = ops.vm.create_vinfo()
+        vinfo = ops.vm.create_vinfo_physical()
         vinfo.add_path(self.PATH_SRC + '/parent1/file1')
         vinfo.add_path(self.PATH_SRC + '/parent1/file2')
         ctx = MagicMock()
@@ -663,9 +642,9 @@ class TestFuseFS(unittest.TestCase):
     def test_unlink_permission(self, mock_unlink):
         ops = self.ops
         ops.auditor.denywrite(self.PATH_SRC + '/parent1')
-        vinfo_p = ops.vm.create_vinfo()
+        vinfo_p = ops.vm.create_vinfo_physical()
         vinfo_p.add_path(self.PATH_SRC + '/parent1')
-        vinfo = ops.vm.create_vinfo()
+        vinfo = ops.vm.create_vinfo_physical()
         vinfo.add_path(self.PATH_SRC + '/parent1/file1')
         vinfo.add_path(self.PATH_SRC + '/parent1/file2')
         ctx = MagicMock()
@@ -680,9 +659,9 @@ class TestFuseFS(unittest.TestCase):
     def test_unlink_discard(self, mock_unlink):
         ops = self.ops
         ops.auditor.discardwrite(self.PATH_SRC + '/parent1/file1')
-        vinfo_p = ops.vm.create_vinfo()
+        vinfo_p = ops.vm.create_vinfo_physical()
         vinfo_p.add_path(self.PATH_SRC + '/parent1')
-        vinfo = ops.vm.create_vinfo()
+        vinfo = ops.vm.create_vinfo_physical()
         vinfo.add_path(self.PATH_SRC + '/parent1/file1')
         vinfo.add_path(self.PATH_SRC + '/parent1/file2')
         ctx = MagicMock()
@@ -695,9 +674,9 @@ class TestFuseFS(unittest.TestCase):
     @patch('fusebox.fusefs.os.symlink')
     def test_symlink_regular(self, mock_symlink, mock_chown):
         ops = self.ops
-        vinfo = ops.vm.create_vinfo()
+        vinfo = ops.vm.create_vinfo_physical()
         vinfo.add_path(self.PATH_SRC + '/file1')
-        vinfo_p = ops.vm.create_vinfo()
+        vinfo_p = ops.vm.create_vinfo_physical()
         vinfo_p.add_path(self.PATH_SRC + '/dest1')
         ctx = MagicMock()
         retval = self._exec(ops.symlink, vinfo_p.vnode, os.fsencode('file2'), os.fsencode(self.PATH_SRC + '/file1'), ctx)
@@ -710,9 +689,9 @@ class TestFuseFS(unittest.TestCase):
     def test_symlink_permission(self, mock_symlink, mock_chown):
         ops = self.ops
         ops.auditor.denywrite(self.PATH_SRC + '/dest1')
-        vinfo = ops.vm.create_vinfo()
+        vinfo = ops.vm.create_vinfo_physical()
         vinfo.add_path(self.PATH_SRC + '/file1')
-        vinfo_p = ops.vm.create_vinfo()
+        vinfo_p = ops.vm.create_vinfo_physical()
         vinfo_p.add_path(self.PATH_SRC + '/dest1')
         ctx = MagicMock()
         with self.assertRaises(pyfuse3.FUSEError) as e:
@@ -724,9 +703,9 @@ class TestFuseFS(unittest.TestCase):
     def test_symlink_discard(self, mock_symlink, mock_chown):
         ops = self.ops
         ops.auditor.discardwrite(self.PATH_SRC + '/dest1')
-        vinfo = ops.vm.create_vinfo()
+        vinfo = ops.vm.create_vinfo_physical()
         vinfo.add_path(self.PATH_SRC + '/file1')
-        vinfo_p = ops.vm.create_vinfo()
+        vinfo_p = ops.vm.create_vinfo_physical()
         vinfo_p.add_path(self.PATH_SRC + '/dest1')
         ctx = MagicMock()
         retval = self._exec(ops.symlink, vinfo_p.vnode, os.fsencode('file2'), os.fsencode(self.PATH_SRC + '/file1'), ctx)
