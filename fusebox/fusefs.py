@@ -7,7 +7,7 @@ import logging
 import faulthandler
 from fusebox.auditor import Auditor, Permission, Order
 from fusebox.vnode import VnodeManager, FD
-from fusebox.controller import construct_controllers, NullVnodeInfo
+from fusebox.pseudo import construct_controllers, NullVnodeInfo
 
 faulthandler.enable()
 
