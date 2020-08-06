@@ -10,7 +10,7 @@ class TestVnodeInfo(unittest.TestCase):
     @classmethod
     @patch('fusebox.vnode.os.path.lexists', return_value=True)
     def configure_a(cls, manager, mock_mpe):
-        vinfo = vnode.VnodeInfoPhysical(manager)
+        vinfo = vnode.VnodeInfoGenuine(manager)
         vinfo.add_path(vnode.AbsPath(cls.TPATH + '1'))
         vinfo.add_path(vnode.AbsPath(cls.TPATH + '2'))
         return vinfo

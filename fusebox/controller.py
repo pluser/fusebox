@@ -6,7 +6,7 @@ import re
 import logging
 import stat
 import pyfuse3
-from fusebox.vnode import VnodeManager, VnodeInfoVirtual, AbsPath
+from fusebox.vnode import VnodeManager, VnodeInfoPseudo, AbsPath
 from fusebox.auditor import Auditor, Order
 
 _logger_root = logging.getLogger('Fusebox')
@@ -30,7 +30,7 @@ def construct_controllers(fusebox: 'Fusebox'):
     vinfo_version.add_path(vm.make_path(path_controller, 'version'))
 
 
-class RootControllerVnodeInfo(VnodeInfoVirtual):
+class RootControllerVnodeInfo(VnodeInfoPseudo):
     def __init__(self, manager: VnodeManager, path: AbsPath):
         super().__init__(manager)
         self.filemode = (
@@ -51,7 +51,7 @@ class RootControllerVnodeInfo(VnodeInfoVirtual):
         return [(name, self.manager[self.manager.make_path(self.path, name)].getattr()) for name in self.files]
 
 
-class AclControllerVnodeInfo(VnodeInfoVirtual):
+class AclControllerVnodeInfo(VnodeInfoPseudo):
     def __init__(self, manager: VnodeManager, auditor: Auditor):
         super().__init__(manager)
         self.auditor = auditor
@@ -175,7 +175,7 @@ class AclControllerVnodeInfo(VnodeInfoVirtual):
         return len(buf)
 
 
-class VersionControllerVnodeInfo(VnodeInfoVirtual):
+class VersionControllerVnodeInfo(VnodeInfoPseudo):
     def __init__(self, manager: VnodeManager):
         super().__init__(manager)
         self.filemode = (
@@ -202,7 +202,7 @@ class VersionControllerVnodeInfo(VnodeInfoVirtual):
         raise pyfuse3.FUSEError(errno.EACCES)
 
 
-class NullVnodeInfo(VnodeInfoVirtual):
+class NullVnodeInfo(VnodeInfoPseudo):
     def __init__(self, manager: VnodeManager):
         super().__init__(manager)
         self.filemode = (

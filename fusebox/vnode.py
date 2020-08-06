@@ -34,7 +34,7 @@ class VnodeInfo(ABC):
 
     @property
     def virtual(self) -> bool:
-        return isinstance(self, VnodeInfoVirtual)
+        return isinstance(self, VnodeInfoPseudo)
 
     @property
     def opencount(self) -> int:
@@ -107,7 +107,7 @@ class VnodeInfo(ABC):
         raise NotImplementedError
 
 
-class VnodeInfoPhysical(VnodeInfo):
+class VnodeInfoGenuine(VnodeInfo):
     def __init__(self, manager: 'VnodeManager') -> None:
         """Create new VnodeInfo. Register to the container"""
         super().__init__(manager)
@@ -196,7 +196,7 @@ class VnodeInfoPhysical(VnodeInfo):
         return ent
 
 
-class VnodeInfoVirtual(VnodeInfo):
+class VnodeInfoPseudo(VnodeInfo):
     def __init__(self, manager: 'VnodeManager'):
         super().__init__(manager)
         # flags
@@ -249,7 +249,7 @@ class VnodeManager:
         # install initial root vnode.
         if not os.path.isdir(root_path):
             raise RuntimeError
-        self._vnodes[pyfuse3.ROOT_INODE] = VnodeInfoPhysical(manager=self)
+        self._vnodes[pyfuse3.ROOT_INODE] = VnodeInfoGenuine(manager=self)
         self._vnodes[pyfuse3.ROOT_INODE].add_path(root_path)
         self._paths[root_path] = self._vnodes[pyfuse3.ROOT_INODE]
 
@@ -262,7 +262,7 @@ class VnodeManager:
             vinfo = self._get_vinfo_by_path(AbsPath(key))
         else:
             raise TypeError
-        if isinstance(vinfo, VnodeInfoPhysical):
+        if isinstance(vinfo, VnodeInfoGenuine):
             vinfo.cleanup_mapping()
         return vinfo
 
@@ -305,7 +305,7 @@ class VnodeManager:
             vinfo = self._get_vinfo_by_fd(fd)
         else:
             raise RuntimeError
-        if isinstance(vinfo, VnodeInfoPhysical):
+        if isinstance(vinfo, VnodeInfoGenuine):
             vinfo.cleanup_mapping()
         return vinfo
 
@@ -376,12 +376,12 @@ class VnodeManager:
         self.vnode_payout_max_num += 1
         return self.vnode_payout_max_num
 
-    def create_vinfo_physical(self) -> VnodeInfoPhysical:
+    def create_vinfo_physical(self) -> VnodeInfoGenuine:
         """Create VnodeInfo and make under control of manager"""
-        vinfo = VnodeInfoPhysical(manager=self)
+        vinfo = VnodeInfoGenuine(manager=self)
         return vinfo
 
-    def create_vinfo_virtual(self) -> VnodeInfoVirtual:
+    def create_vinfo_virtual(self) -> VnodeInfoPseudo:
         """Create VnodeInfo and make under control of manager"""
-        vinfo = VnodeInfoVirtual(manager=self)
+        vinfo = VnodeInfoPseudo(manager=self)
         return vinfo
