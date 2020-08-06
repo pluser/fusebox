@@ -39,56 +39,6 @@ class TestFuseFS(unittest.TestCase):
         self.patch_os_lstat.stop()
         self.patch_os_path_lexists.stop()
 
-    def test_acl_command(self):
-        def enc(x):
-            return x.encode('utf-8')
-        ops = self.ops
-        vinfo = ops.vm.get(path=ops.vm.make_path(ops.path_source, ops.CONTROLLER_FILENAME, 'acl'))
-        with patch.object(vinfo, 'auditor') as mock_auditor:
-
-            vinfo.write(0, vinfo.getattr().st_size, enc('INVALID-ORDER /test/foo/bar'))
-            mock_auditor.assert_not_called()
-            mock_auditor.reset_mock()
-
-            vinfo.write(0, vinfo.getattr().st_size, enc('allowread /test'))
-            mock_auditor.allowread.assert_called_with('/test')
-            mock_auditor.reset_mock()
-
-            vinfo.write(0, vinfo.getattr().st_size, enc('allowwrite /test'))
-            mock_auditor.allowwrite.assert_called_with('/test')
-            mock_auditor.reset_mock()
-
-            vinfo.write(0, vinfo.getattr().st_size, enc('denyread /test'))
-            mock_auditor.denyread.assert_called_with('/test')
-            mock_auditor.reset_mock()
-
-            vinfo.write(0, vinfo.getattr().st_size, enc('denywrite /test'))
-            mock_auditor.denywrite.assert_called_with('/test')
-            mock_auditor.reset_mock()
-
-            vinfo.write(0, vinfo.getattr().st_size, enc('discardwrite /test'))
-            mock_auditor.discardwrite.assert_called_with('/test')
-            mock_auditor.reset_mock()
-
-            vinfo.write(0, vinfo.getattr().st_size, enc('addread /test'))
-            mock_auditor.allowread.assert_called_with('/test')
-            mock_auditor.reset_mock()
-
-            vinfo.write(0, vinfo.getattr().st_size, enc('addwrite /test'))
-            mock_auditor.allowread.assert_called_with('/test')
-            mock_auditor.allowwrite.assert_called_with('/test')
-            mock_auditor.reset_mock()
-
-            vinfo.write(0, vinfo.getattr().st_size, enc('adddeny /test'))
-            mock_auditor.denyread.assert_called_with('/test')
-            mock_auditor.denywrite.assert_called_with('/test')
-            mock_auditor.reset_mock()
-
-            vinfo.write(0, vinfo.getattr().st_size, enc('addpredict /test'))
-            mock_auditor.allowread.assert_called_with('/test')
-            mock_auditor.discardwrite.assert_called_with('/test')
-            mock_auditor.reset_mock()
-
     @patch('fusebox.fusefs.os.lstat')
     @patch('fusebox.fusefs.os.path.isdir')
     def test___init__(self, mock_isdir, mock_lstat):
@@ -345,23 +295,6 @@ class TestFuseFS(unittest.TestCase):
         self.assertEqual(name, b'file2')
         self.assertIsInstance(entryattr, pyfuse3.EntryAttributes)
         self.assertEqual(vnodenum, ops.vm.get(path=PARENT_DIR + '/file2').vnode)
-
-    # @patch('fusebox.vnode.VnodeInfoVirtual.getattr')
-    # @patch('fusebox.fusefs.pyfuse3.listdir')
-    # @patch('fusebox.fusefs.pyfuse3.readdir_reply')
-    # def test_readdir_virtual(self, mock_pfrep, mock_listdir, mock_getattr):
-    #     ops = self.ops
-    #     vinfo_parent = ops.vm.create_vinfo_virtual()
-    #     vinfo_parent.add_path(self.PATH_SRC)
-    #     mock_listdir.assert_not_called()
-    #     mock_getattr.return_value.st_ino = 2
-    #     self._exec(ops.readdir, vnode=vinfo_parent.vnode, offset=0, token='ABCD')
-    #     mock_listdir.assert_called_with(self.PATH_SRC)
-    #     mock_pfrep.assert_called_with(
-    #         'ABCD',
-    #         os.fsencode('fuseboxctlv1'),
-    #         mock_getattr.return_value,
-    #         ops.vm.get(path=ops.vm.make_path(self.PATH_SRC, 'fuseboxctlv1')).vnode)
 
     @patch('fusebox.fusefs.os.mkdir')
     @patch('fusebox.fusefs.os.chown')

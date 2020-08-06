@@ -69,7 +69,7 @@ class AclControllerVnodeInfo(VnodeInfoPseudo):
         string += 'clearall'
         string += '\n\n'
 
-        string += '[Read]\n'
+        #string += '[Read]\n'
         for perm in self.auditor.permission_read:
             order = perm.order
             if order == Order.ALLOW:
@@ -80,7 +80,7 @@ class AclControllerVnodeInfo(VnodeInfoPseudo):
             string += perm.path
             string += '\n'
 
-        string += '[Write]\n'
+        #string += '[Write]\n'
         for perm in self.auditor.permission_write:
             order = perm.order
             if order == Order.ALLOW:
@@ -115,7 +115,7 @@ class AclControllerVnodeInfo(VnodeInfoPseudo):
         content.write(buf)
         content.seek(0)
         for l in content.read().decode().splitlines():
-            if l.startswith('#'):  # if there were comment
+            if l.startswith('#') or l == '':  # skip comment and blank lines
                 continue
             match = re.fullmatch(r'^(?P<order>\S+)\s*(?P<args>.*)$', l)
             if not match:
