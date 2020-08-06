@@ -291,6 +291,14 @@ class Fusebox(pyfuse3.Operations):
             fd = FD(os.open('/dev/null', flags))  # reserve file descriptor number
             vinfo.open_vnode(fd)
             return pyfuse3.FileInfo(fh=fd)
+        elif self.auditor.ask_discard(vinfo.path):
+            try:
+                # open with readonly mode
+                fd = FD(os.open(vinfo.path, flags & ~(os.O_TRUNC | os.O_RDWR | os.O_WRONLY) | os.O_RDONLY))
+            except OSError as exc:
+                raise pyfuse3.FUSEError(exc.errno)
+            vinfo.open_vnode(fd)
+            return pyfuse3.FileInfo(fh=fd)
         else:
             if flags & os.O_RDWR and not (self.auditor.ask_writable(vinfo.path) and self.auditor.ask_readable(vinfo.path)):
                 _opslog.info('Reading and writing to PATH <{}> is not permitted.'.format(vinfo.path))
@@ -335,6 +343,7 @@ class Fusebox(pyfuse3.Operations):
             except OSError as exc:
                 raise pyfuse3.FUSEError(exc.errno)
             self.vinfo_null.open_vnode(fd)
+            self.vinfo_null.add_path(path)
             _acslog.info('CREATE-FAKE: {}'.format(path))
             return pyfuse3.FileInfo(fh=fd), self.vinfo_null.getattr()
 
