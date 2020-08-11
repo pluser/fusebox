@@ -6,8 +6,8 @@ import re
 import logging
 import stat
 import pyfuse3
-from fusebox.vnode import VnodeManager, VnodeInfoPseudo, AbsPath
-from fusebox.auditor import Auditor, Order
+from .vnode import VnodeManager, VnodeInfoPseudo, AbsPath
+from .auditor import Auditor, Order
 
 _logger_root = logging.getLogger('Fusebox')
 _opslog = _logger_root.getChild('operation')

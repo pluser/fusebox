@@ -9,7 +9,7 @@ import pyfuse3
 import trio
 import argparse
 import logging
-from fusebox import fusefs
+from . import fusefs
 import os
 
 logger_root = logging.getLogger('Fusebox')

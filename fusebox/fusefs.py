@@ -5,9 +5,9 @@ import stat
 import pyfuse3
 import logging
 import faulthandler
-from fusebox.auditor import Auditor, Permission, Order
-from fusebox.vnode import VnodeManager, FD
-from fusebox.pseudo import construct_controllers, NullVnodeInfo
+from .auditor import Auditor, Permission, Order
+from .vnode import VnodeManager, FD
+from .pseudo import construct_controllers, NullVnodeInfo
 
 faulthandler.enable()
 

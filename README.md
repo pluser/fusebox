@@ -14,7 +14,7 @@ The sandbox currently used in the Portage package system hooks up writes to the 
 ## How to Use
 
 1. Mount rootfs to arbitary mountpoint.
-`python fusebox.py / ${MOUNTPOINT}`
+`python -m fusebox.fusebox / ${MOUNTPOINT}`
 1. In another terminal, mount pseudo filesystems
    - `mount -t proc procfs ${MOUNTPOINT}/proc`
    - `mount -t sysfs sysfs ${MOUNTPOINT}/sys`
