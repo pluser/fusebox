@@ -2,7 +2,7 @@
 name = "fusebox"
 version = "0.1.0"
 description = "FUSE-powered sandbox for Gentoo Linux"
-authors = ["Kaoru Esashika <e_kaoru5@yahoo.co.jp>"]
+authors = ["Kaoru Esashika <pluser@pluser.net>"]
 license = "GPL-3.0"
 
 [tool.poetry.dependencies]
@@ -12,6 +12,9 @@ trio = "^0.15.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.4.3"
+
+[tool.poetry.scripts]
+fusebox = "fusebox.fusebox:main"
 
 [build-system]
 requires = ["poetry>=0.12"]
