@@ -11,7 +11,8 @@ install_requires = \
 ['pyfuse3>=3.0.0,<4.0.0', 'trio>=0.15.1,<0.16.0']
 
 entry_points = \
-{'console_scripts': ['fusebox = fusebox.fusebox:main']}
+{'console_scripts': ['fusebox = fusebox.fusebox:main',
+                     'fuseboxing = fusebox.fuseboxing:main']}
 
 setup_kwargs = {
     'name': 'fusebox',

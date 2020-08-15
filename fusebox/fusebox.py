@@ -29,7 +29,6 @@ def export_logfile(fs, basepath):
     with open(basepath + '.rw.txt', mode='w', newline='') as fd:
         csv.writer(fd, delimiter='\n').writerows(o_rw)
 
-
 def main():
     # parse command line ###
     parser = argparse.ArgumentParser()
