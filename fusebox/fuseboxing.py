@@ -21,9 +21,14 @@ MOUNTPOINT = '/tmp/test'
 
 def launcher(cmd):
     curwd = os.getcwd()
+    subprocess.run(['mount', '--rbind', '/dev', MOUNTPOINT+'/dev'])
+    subprocess.run(['mount', '--type', 'proc', 'proc', MOUNTPOINT+'/proc'])
+    subprocess.run(['mount', '--rbind', '/sys', MOUNTPOINT+'/sys'])
     os.chroot(MOUNTPOINT)  # now, process is in the jail
     os.chdir(curwd)  # go to the working directory on sandbox
-    subprocess.run(cmd)
+    # FIXME: shuld be respect uid and gid
+    # which should be given from emerge process
+    subprocess.run(cmd, stdin=subprocess.DEVNULL)
 
 def main():
     ### parse command line ###
