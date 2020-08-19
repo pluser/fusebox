@@ -52,7 +52,11 @@ class Fusebox(pyfuse3.Operations):
         return stat_
 
     async def getattr(self, vnode, ctx=None):
-        vinfo = self.vm[vnode]
+        try:
+            vinfo = self.vm[vnode]
+        except KeyError:
+            # when?
+            raise pyfuse3.FUSEError(errno.ENOENT) # no such file or directory
         _opslog.debug('getattr path: {}, fd: {}'.format(vinfo.paths, vinfo.fds))
         if self.path_mountpoint in vinfo.paths:
             raise pyfuse3.FUSEError(errno.ENOENT)
@@ -86,20 +90,26 @@ class Fusebox(pyfuse3.Operations):
     #     return entry
 
     async def setattr(self, vnode, attr, needs, fd, ctx):
-        if fd is None:
-            vinfo = self.vm[vnode]
-            pofd = vinfo.path
-            trunc = os.truncate
-            chmod = os.chmod
-            chown = os.chown
-            fstat = os.lstat
-        else:
+        if fd:
             vinfo = self.vm.get(fd=fd)
             pofd = fd
             trunc = os.ftruncate
             chmod = os.fchmod
             chown = os.fchown
             fstat = os.fstat
+        elif vnode:
+            vinfo = self.vm[vnode]
+            try:
+                pofd = vinfo.path
+            except:
+                raise pyfuse3.FUSEError(errno.ENOENT)
+            trunc = os.truncate
+            chmod = os.chmod
+            chown = os.chown
+            fstat = os.lstat
+        else:
+            # When?
+            raise pyfuse3.FUSEError(errno.ENOENT)  # No such file or directory
 
         if vinfo.virtual:
             return vinfo.getattr()
@@ -248,6 +258,7 @@ class Fusebox(pyfuse3.Operations):
             # Don't count up reference count if want_next_entry is False
             path_c = self.vm.make_path(vinfo_p.path, name)
             vinfo_c.add_path(path_c)
+        _acslog.info('READDIR: {}'.format(vinfo_p.path))
 
     async def mkdir(self, vnode_parent, name, mode, ctx):
         path = self.vm.make_path(self.vm[vnode_parent].path, os.fsdecode(name))

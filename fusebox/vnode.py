@@ -4,6 +4,7 @@ from collections import namedtuple
 import pyfuse3
 import os
 import stat
+import errno
 
 AbsPath = typ.NewType('AbsPath', str)
 Vnode = typ.NewType('Vnode', int)
@@ -77,8 +78,8 @@ class VnodeInfo(ABC):
         if abspath in self._paths:  # path may be removed by cleanup_mapping() already
             self._paths.remove(abspath)
         self.manager.notify_path_remove(self, path)
-        if len(self._paths):
-            self.manager.notify_vinfo_unbind(self)
+        #if not self._paths and not self._fds:
+        #    self.manager.notify_vinfo_unbind(self)
 
     def open_vnode(self, fd: FD) -> None:
         """Notifying file descriptor was opened"""
@@ -165,6 +166,9 @@ class VnodeInfoGenuine(VnodeInfo):
             stat_ = os.lstat(self.path)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
+        except:
+            # when?
+            raise pyfuse3.FUSEError(errno.ENOENT)  # No such file or directory
         # copy attrs from base FS.
         for attr in ('st_mode', 'st_nlink', 'st_uid', 'st_gid', 'st_rdev',
                      'st_size', 'st_atime_ns', 'st_mtime_ns', 'st_ctime_ns'):
