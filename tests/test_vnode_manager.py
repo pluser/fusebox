@@ -33,7 +33,7 @@ class TestVnodeManager(unittest.TestCase):
         vinfo_a.add_path(cls.RPATH + '2')
         vinfo_b = vm.create_vinfo_physical()
         vinfo_b.add_path(cls.RPATH + '3')
-        vinfo_b.open_vnode(5)
+        vinfo_b.open_vnode(5, cls.RPATH + '3', 0)
         return vm, vinfo_a, vinfo_b
 
     @patch('fusebox.vnode.os')

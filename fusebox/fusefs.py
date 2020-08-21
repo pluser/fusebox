@@ -90,6 +90,20 @@ class Fusebox(pyfuse3.Operations):
     #     return entry
 
     async def setattr(self, vnode, attr, needs, fd, ctx):
+        if vnode:
+            vinfo = self.vm[vnode]
+            if vinfo.paths:
+                pofd = vinfo.path
+                trunc = os.truncate
+                chmod = os.chmod
+                chown = os.chown
+                fstat = os.lstat
+            elif vinfo.fds:
+                # file is unlinked already, but opened.
+                fd = list(vinfo.fds)[0]
+            else:
+                raise RuntimeError()
+                # raise pyfuse3.FUSEError(errno.EIO)  # I/O error
         if fd:
             vinfo = self.vm.get(fd=fd)
             pofd = fd
@@ -97,19 +111,10 @@ class Fusebox(pyfuse3.Operations):
             chmod = os.fchmod
             chown = os.fchown
             fstat = os.fstat
-        elif vnode:
-            vinfo = self.vm[vnode]
-            try:
-                pofd = vinfo.path
-            except:
-                raise pyfuse3.FUSEError(errno.ENOENT)
-            trunc = os.truncate
-            chmod = os.chmod
-            chown = os.chown
-            fstat = os.lstat
-        else:
+        if not vnode and not fd:
             # When?
-            raise pyfuse3.FUSEError(errno.ENOENT)  # No such file or directory
+            raise ValueError()
+            # raise pyfuse3.FUSEError(errno.EIO)  # I/O error
 
         if vinfo.virtual:
             return vinfo.getattr()
@@ -244,7 +249,8 @@ class Fusebox(pyfuse3.Operations):
         entries = self._readdir(vinfo_p)
         _opslog.debug('read %d entries, starting at %d', len(entries), offset)
         # FIXME: result is break if entries is changed between two calls to readdir()
-        assert len(tuple(zip(*entries))[0]) == len(set(tuple(zip(*entries))[0]))  # entries must not duplicate
+        if entries:  # asking empty directory? when?
+            assert len(tuple(zip(*entries))[0]) == len(set(tuple(zip(*entries))[0]))  # entries must not duplicate
         for ino, name, attr in sorted(entries):
             if ino <= offset:
                 continue
@@ -259,6 +265,9 @@ class Fusebox(pyfuse3.Operations):
             path_c = self.vm.make_path(vinfo_p.path, name)
             vinfo_c.add_path(path_c)
         _acslog.info('READDIR: {}'.format(vinfo_p.path))
+
+    async def mknod(self, parent_inode, name, mode, rdev, ctx):
+        raise RuntimeError()
 
     async def mkdir(self, vnode_parent, name, mode, ctx):
         path = self.vm.make_path(self.vm[vnode_parent].path, os.fsdecode(name))
@@ -300,7 +309,7 @@ class Fusebox(pyfuse3.Operations):
         _acslog.info('OPEN: {}'.format(vinfo.path))
         if vinfo.virtual:
             fd = FD(os.open('/dev/null', flags))  # reserve file descriptor number
-            vinfo.open_vnode(fd)
+            vinfo.open_vnode(fd, '/dev/null', flags, discard=False)
             return pyfuse3.FileInfo(fh=fd)
         elif self.auditor.ask_discard(vinfo.path):
             try:
@@ -308,7 +317,7 @@ class Fusebox(pyfuse3.Operations):
                 fd = FD(os.open(vinfo.path, flags & ~(os.O_TRUNC | os.O_RDWR | os.O_WRONLY) | os.O_RDONLY))
             except OSError as exc:
                 raise pyfuse3.FUSEError(exc.errno)
-            vinfo.open_vnode(fd)
+            vinfo.open_vnode(fd, vinfo.path, flags & ~(os.O_TRUNC | os.O_RDWR | os.O_WRONLY) | os.O_RDONLY, discard=True)
             return pyfuse3.FileInfo(fh=fd)
         else:
             if flags & os.O_RDWR and not (self.auditor.ask_writable(vinfo.path) and self.auditor.ask_readable(vinfo.path)):
@@ -331,14 +340,14 @@ class Fusebox(pyfuse3.Operations):
                 self.stat_path_open_w.add(vinfo.path)
             else:
                 self.stat_path_open_r.add(vinfo.path)
-            vinfo.open_vnode(fd)
+            vinfo.open_vnode(fd, vinfo.path, flags, discard=False)
             return pyfuse3.FileInfo(fh=fd)
 
     async def read(self, fd, offset, length):
         vinfo = self.vm.get(fd=fd)
-        _acslog.info('READ: {}'.format(vinfo.path))
-        if not vinfo.virtual and not self.auditor.ask_readable(vinfo.path):
-            raise pyfuse3.FUSEError(errno.EACCES)
+        _acslog.info('READ: {}'.format(vinfo))
+        #if not vinfo.virtual and not self.auditor.ask_readable(vinfo.path):
+        #    raise pyfuse3.FUSEError(errno.EACCES)
         return vinfo.read(fd, offset, length)
 
     async def create(self, vnode_parent, name, mode, flags, ctx):
@@ -353,7 +362,7 @@ class Fusebox(pyfuse3.Operations):
                 fd = FD(os.open('/dev/null', flags & ~os.O_CREAT))
             except OSError as exc:
                 raise pyfuse3.FUSEError(exc.errno)
-            self.vinfo_null.open_vnode(fd)
+            self.vinfo_null.open_vnode(fd, '/dev/null', flags & ~os.O_CREAT, discard=True)
             self.vinfo_null.add_path(path)
             _acslog.info('CREATE-FAKE: {}'.format(path))
             return pyfuse3.FileInfo(fh=fd), self.vinfo_null.getattr()
@@ -364,16 +373,16 @@ class Fusebox(pyfuse3.Operations):
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
         vinfo.add_path(path)
-        vinfo.open_vnode(FD(fd))
+        vinfo.open_vnode(fd, path, flags | os.O_CREAT | os.O_TRUNC, discard=False)
         _acslog.info('CREATE: {}'.format(path))
         return pyfuse3.FileInfo(fh=fd), vinfo.getattr()
 
     async def write(self, fd, offset, buf):
         vinfo = self.vm.get(fd=fd)
-        _acslog.info('WRITE: {}'.format(vinfo.path))
-        if not vinfo.virtual and not self.auditor.ask_writable(vinfo.path):
-            raise pyfuse3.FUSEError(errno.EACCES)
-        if not vinfo.virtual and self.auditor.ask_discard(vinfo.path):
+        _acslog.info('WRITE: {}'.format(vinfo))
+        #if not vinfo.virtual and not self.auditor.ask_writable(vinfo.path):
+        #    raise pyfuse3.FUSEError(errno.EACCES)
+        if not vinfo.virtual and vinfo.fdparam[fd].discard:
             return len(buf)
         return vinfo.write(fd, offset, buf)
 

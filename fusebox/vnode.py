@@ -9,7 +9,7 @@ import errno
 AbsPath = typ.NewType('AbsPath', str)
 Vnode = typ.NewType('Vnode', int)
 FD = typ.NewType('FD', int)
-
+FDParams = namedtuple('FDParams', 'path mode discard')
 
 class VnodeInfo(ABC):
     def __init__(self, manager: 'VnodeManager') -> None:
@@ -17,7 +17,7 @@ class VnodeInfo(ABC):
         super().__init__()
         self.manager: VnodeManager = manager
         self._paths: typ.Set[AbsPath] = set()
-        self._fds: typ.Set[FD] = set()
+        self._fds: typ.Dict[FD, FDParams] = dict()
         self.refcount: int = 0
 
         self.vnode: Vnode = Vnode(manager.payout_vnode_num())
@@ -31,7 +31,7 @@ class VnodeInfo(ABC):
         self.manager = None
 
     def __str__(self):
-        return 'vinfo-{} path:{}'.format(self.vnode, next(iter(self._paths)))
+        return 'vinfo-{} path:{} fd:{}'.format(self.vnode, self._paths, self._fds)
 
     @property
     def virtual(self) -> bool:
@@ -54,7 +54,13 @@ class VnodeInfo(ABC):
     @property
     def fds(self) -> typ.Set[FD]:
         """Return a sort of file descriptor which is related in the vnode"""
-        return self._fds.copy()
+        keys = self._fds.keys()
+        assert len(keys) == len(set(keys))  # all keys should be unique
+        return set(keys)
+
+    @property
+    def fdparam(self) -> typ.Dict[FD, FDParams]:
+        return self._fds
 
     @property
     def directory(self) -> bool:
@@ -81,14 +87,14 @@ class VnodeInfo(ABC):
         #if not self._paths and not self._fds:
         #    self.manager.notify_vinfo_unbind(self)
 
-    def open_vnode(self, fd: FD) -> None:
+    def open_vnode(self, fd: FD, path, mode, discard=False) -> None:
         """Notifying file descriptor was opened"""
-        self._fds.add(fd)
+        self._fds[fd] = FDParams(path, mode, discard)
         self.manager.notify_fd_open(self, fd)
 
     def close_vnode(self, fd: FD) -> None:
         """Notifying file descriptor was closed"""
-        self._fds.remove(fd)
+        del self._fds[fd]
         self.manager.notify_fd_close(self, fd)
 
     def forget_reference(self, ref_count: int) -> None:
@@ -128,7 +134,9 @@ class VnodeInfoGenuine(VnodeInfo):
     @property
     def fds(self) -> typ.Set[FD]:
         """Return a sort of file descriptor which is related in the vnode"""
-        return self._fds.copy()
+        keys = self._fds.keys()
+        assert len(keys) == len(set(keys))  # all keys should be unique
+        return set(keys)
 
     def cleanup_mapping(self) -> None:
         """Remove vnode mappings which is not exist in real FS
@@ -162,13 +170,22 @@ class VnodeInfoGenuine(VnodeInfo):
     def getattr(self) -> pyfuse3.EntryAttributes:
         entry = pyfuse3.EntryAttributes()
 
-        try:
-            stat_ = os.lstat(self.path)
-        except OSError as exc:
-            raise pyfuse3.FUSEError(exc.errno)
-        except:
+        if self.paths:
+            try:
+                stat_ = os.lstat(self.path)
+            except OSError as exc:
+                raise pyfuse3.FUSEError(exc.errno)
+        elif self.fds:
+            # file is unlinked already, but opened.
+            try:
+                stat_ = os.fstat(list(self.fds)[0])
+            except OSError as exc:
+                raise pyfuse3.FUSEError(exc.errno)
+        else:
             # when?
-            raise pyfuse3.FUSEError(errno.ENOENT)  # No such file or directory
+            raise RuntimeError()
+            #raise pyfuse3.FUSEError(errno.ENOENT)  # No such file or directory
+
         # copy attrs from base FS.
         for attr in ('st_mode', 'st_nlink', 'st_uid', 'st_gid', 'st_rdev',
                      'st_size', 'st_atime_ns', 'st_mtime_ns', 'st_ctime_ns'):

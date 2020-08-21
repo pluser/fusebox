@@ -49,14 +49,14 @@ class TestVnodeInfoGenuine(unittest.TestCase):
     def test_open_vnode(self):
         mock_vm = MagicMock()
         vinfo = self.configure_a(mock_vm)
-        vinfo.open_vnode(129)
+        vinfo.open_vnode(129, self.TPATH + '/file1', 0)
         self.assertIn(129, vinfo.fds)
         mock_vm.notify_fd_open.assert_called_with(vinfo, 129)
 
     def test_close_vnode(self):
         mock_vm = MagicMock()
         vinfo = self.configure_a(mock_vm)
-        vinfo.open_vnode(129)
+        vinfo.open_vnode(129, self.TPATH + '/file1', 0)
         self.assertIn(129, vinfo.fds)
         mock_vm.notify_fd_close(vinfo, 129)
 
