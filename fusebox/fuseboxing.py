@@ -86,6 +86,7 @@ def main():
     if args.fusebox_debug:
         fuse_options.add('debug')
     fuse_options.add('dev')
+    fuse_options.add('allow_other')
     pyfuse3.init(fsops, MOUNTPOINT, fuse_options)  # From this point, accessing under mountpoint will be blocked.
     fsops.auditor.allowread('/')  # FIXME: allow all access to test...
     fsops.auditor.allowwrite('/')  # FIXME: allow all access to test...

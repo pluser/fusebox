@@ -68,6 +68,7 @@ def main():
     if args.debug:
         fuse_options.add('debug')
     fuse_options.add('dev')
+    fuse_options.add('allow_other')
     pyfuse3.init(fsops, args.mountpoint, fuse_options)
     try:
         trio.run(pyfuse3.main)
