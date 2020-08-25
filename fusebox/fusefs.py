@@ -385,6 +385,7 @@ class Fusebox(pyfuse3.Operations):
         vinfo = self.vm.create_vinfo_physical()
         try:
             fd = FD(os.open(path, flags | os.O_CREAT | os.O_TRUNC, mode))
+            os.chown(path, ctx.uid, ctx.gid, follow_symlinks=False)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
         vinfo.add_path(path)

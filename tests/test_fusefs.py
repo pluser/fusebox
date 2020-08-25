@@ -445,13 +445,16 @@ class TestFuseFS(unittest.TestCase):
             self.assertEqual(finfo_a.fh, mock_open.return_value)
             mock_open.assert_called_with(vinfo_a.path, os.O_RDONLY)  # just readonly even if opened trunc mode
 
+    @patch('fusebox.fusefs.os.chown')
     @patch('fusebox.fusefs.os.open')
-    def test_create_access_allowed(self, mock_open):
+    def test_create_access_allowed(self, mock_open, mock_chown):
         ops = self.ops
         vinfo_p = ops.vm.create_vinfo_physical()
         vinfo_p.add_path(self.PATH_SRC + '/parent1')
-        self._exec(ops.create, vinfo_p.vnode, os.fsencode('child1'), 0, 0, None)
-        mock_open.assert_called_with(self.PATH_SRC + '/parent1/child1', os.O_CREAT | os.O_TRUNC, 0)
+        ctx = MagicMock()
+        self._exec(ops.create, vinfo_p.vnode, os.fsencode('child1'), 0, 0, ctx)
+        mock_open.assert_called_once_with(self.PATH_SRC + '/parent1/child1', os.O_CREAT | os.O_TRUNC, 0)
+        mock_chown.assert_called_once_with(self.PATH_SRC + '/parent1/child1', ctx.uid, ctx.gid, follow_symlinks=False)
 
     @patch('fusebox.fusefs.os.open')
     def test_create_access_prohibited(self, mock_open):
