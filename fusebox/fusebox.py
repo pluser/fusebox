@@ -61,6 +61,9 @@ def main():
         dbglog.error('Given mountpoint path <{}> is not valid directory'.format(args.mountpoint))
         sys.exit(1)
 
+    # setting process environment
+    os.umask(0)  # to respect file permission which user specified
+
     # start filesystem ###
     fsops = fusefs.Fusebox(os.path.abspath(args.source), os.path.abspath(args.mountpoint))
     fuse_options = set(pyfuse3.default_options)

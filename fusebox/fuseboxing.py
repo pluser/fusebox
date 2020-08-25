@@ -79,6 +79,16 @@ def main():
     acshandler.setFormatter(acsformatter)
     acslog.addHandler(acshandler)
 
+    # setting process environment
+    umask_prev = os.umask(0)  # to respect file permission which user specified
+
+    # print current status
+    dbglog.info('*** Fusebox Status ***')
+    dbglog.info('uid:\t{}'.format(os.getuid()))
+    dbglog.info('gid:\t{}'.format(os.getgid()))
+    dbglog.info('pid:\t{}'.format(os.getpid()))
+    dbglog.info('prev_umask:\t{:04o}'.format(umask_prev))
+
     # start filesystem ###
     fsops = fusefs.Fusebox(os.path.abspath('/'), os.path.abspath(MOUNTPOINT))
     fuse_options = set(pyfuse3.default_options)
