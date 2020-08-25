@@ -267,7 +267,22 @@ class Fusebox(pyfuse3.Operations):
         _acslog.info('READDIR: {}'.format(vinfo_p.path))
 
     async def mknod(self, parent_inode, name, mode, rdev, ctx):
-        raise RuntimeError()
+        vinfo_p = self.vm[parent_inode]
+        path = self.vm.make_path(vinfo_p.path, os.fsdecode(name))
+        if self.auditor.ask_discard(path):
+            _acslog.info('MKDIR-FAKE: {}'.format(path))
+            attr = self.vinfo_null.getattr()
+            attr.st_mode = mode & ~ctx.umask
+            return attr
+        try:
+            os.mknod(path, mode=(mode & ~ctx.umask), device=rdev)
+            os.chown(path, ctx.uid, ctx.gid)
+        except OSError as exc:
+            raise pyfuse3.FUSEError(exc.errno)
+        vinfo_c = self.vm.create_vinfo_physical()
+        vinfo_c.add_path(path)
+        _acslog.info('MKNOD: {}'.format(path))
+        return vinfo_c.getattr()
 
     async def mkdir(self, vnode_parent, name, mode, ctx):
         path = self.vm.make_path(self.vm[vnode_parent].path, os.fsdecode(name))
