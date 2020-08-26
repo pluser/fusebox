@@ -21,10 +21,13 @@ def construct_controllers(fusebox: 'Fusebox'):
 
     vinfo_top = RootControllerVnodeInfo(vm, vm.make_path(fusebox.path_source, fusebox.CONTROLLER_FILENAME))  # FIXME: means for register vnodeinfo
     vinfo_top.add_path(vm.make_path(path_controller))
-    vinfo_top.files.extend(['acl', 'version'])
+    vinfo_top.files.extend(['acl', 'acl_switch', 'version'])
 
     vinfo_acl = AclControllerVnodeInfo(vm, auditor)
     vinfo_acl.add_path(vm.make_path(path_controller, 'acl'))
+
+    vinfo_acl_sw = AclSwitchControllerVnodeInfo(vm, auditor)
+    vinfo_acl_sw.add_path(vm.make_path(path_controller, 'acl_switch'))
 
     vinfo_version = VersionControllerVnodeInfo(vm)
     vinfo_version.add_path(vm.make_path(path_controller, 'version'))
@@ -175,11 +178,52 @@ class AclControllerVnodeInfo(VnodeInfoPseudo):
         return len(buf)
 
 
+class AclSwitchControllerVnodeInfo(VnodeInfoPseudo):
+    def __init__(self, manager: VnodeManager, auditor: Auditor):
+        super().__init__(manager)
+        self.auditor = auditor
+        self.filemode = (
+              stat.S_IFREG
+            | stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR
+            | stat.S_IRGRP | stat.S_IWGRP | stat.S_IXGRP
+            | stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH
+        )
+
+    @property
+    def _contents(self) -> str:
+        if self.auditor.enabled:
+            return '1'
+        else:
+            return '0'
+
+    def getattr(self) -> pyfuse3.EntryAttributes:
+        entry = self._getattr_common()
+        entry.st_size = len(self._contents)
+        return entry
+
+    def read(self, fd: int, offset: int, length: int) -> bytes:
+        cont = io.BytesIO((self._contents).encode())
+        cont.seek(offset)
+        retval = cont.read(length)
+        cont.close()
+        return retval
+
+    def write(self, fd: int, offset: int, buf: bytes) -> int:
+        cont = buf.decode()
+        if cont[0] == '0':  # if first byte is zero, disable ACL feature
+            self.auditor.enabled = False
+        elif cont[0] == '1':
+            self.auditor.enabled = True
+        else:  # if invalid input
+            pyfuse3.FUSEError(errno.EINVAL)  # Invalid argument
+        return len(buf)
+
+
 class VersionControllerVnodeInfo(VnodeInfoPseudo):
     def __init__(self, manager: VnodeManager):
         super().__init__(manager)
         self.filemode = (
-            stat.S_IFREG
+              stat.S_IFREG
             | stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR
             | stat.S_IRGRP | stat.S_IWGRP | stat.S_IXGRP
             | stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH

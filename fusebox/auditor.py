@@ -22,6 +22,7 @@ class Auditor():
     def __init__(self) -> None:
         super().__init__()
         self.ops: typ.Optional[pyfuse3.Operations] = None
+        self.enabled = True  # Initially, ACL feature is enabled. If disabled, all access is passthrough.
         self.permission_read: typ.List[Permission] = list()
         self.permission_write: typ.List[Permission] = list()
         self.security_model = SecurityModel.WHITELIST
@@ -53,12 +54,18 @@ class Auditor():
                 raise RuntimeError
 
     def ask_readable(self, path: str) -> bool:
+        if not self.enabled:
+            return True
         return self._check_permission(self.permission_read, path)
 
     def ask_writable(self, path: str) -> bool:
+        if not self.enabled:
+            return True
         return self._check_permission(self.permission_write, path)
 
     def ask_discard(self, path: str) -> bool:
+        if not self.enabled:
+            return False
         if self._check_permission(self.permission_write, path) == Order.DISCARD:
             return True
         else:

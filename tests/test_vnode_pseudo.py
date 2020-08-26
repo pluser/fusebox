@@ -102,3 +102,17 @@ class TestVnodeInfoPseudo(unittest.TestCase):
         mock_auditor.allowread.assert_called_with('/test')
         mock_auditor.discardwrite.assert_called_with('/test')
         mock_auditor.reset_mock()
+
+    def test_ctl_acl_switch(self):
+        manager = MagicMock()
+        auditor = MagicMock()
+        auditor.enabled = False
+        vinfo = pseudo.AclSwitchControllerVnodeInfo(manager=manager, auditor=auditor)
+        manager.notify_vinfo_bind.assert_called_with(vinfo)
+        self.assertTrue(stat.S_ISREG(vinfo.getattr().st_mode))  # Regular file
+        self.assertEqual(b'0', vinfo.read(0, 0, 100))
+        vinfo.write(0, len(vinfo._contents), b'1\n')
+        self.assertTrue(auditor.enabled)
+        self.assertEqual(b'1', vinfo.read(0, 0, 100))
+        vinfo.write(0, len(vinfo._contents), b'0\n')
+        self.assertFalse(auditor.enabled)
