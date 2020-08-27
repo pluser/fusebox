@@ -212,8 +212,10 @@ class AclSwitchControllerVnodeInfo(VnodeInfoPseudo):
         cont = buf.decode()
         if cont[0] == '0':  # if first byte is zero, disable ACL feature
             self.auditor.enabled = False
+            _acslog.info('Fusebox ACL disengaged.')
         elif cont[0] == '1':
             self.auditor.enabled = True
+            _acslog.info('Fusebox ACL engaged.')
         else:  # if invalid input
             pyfuse3.FUSEError(errno.EINVAL)  # Invalid argument
         return len(buf)

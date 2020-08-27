@@ -72,8 +72,8 @@ def main():
         dbglog.setLevel(logging.DEBUG)
     else:
         dbglog.setLevel(logging.INFO)
-    dbglog.setLevel(logging.INFO)
-    acslog.setLevel(logging.WARNING)
+    dbglog.setLevel(logging.WARNING)
+    acslog.setLevel(logging.INFO)
     acsformatter = logging.Formatter()
     acshandler = logging.StreamHandler(sys.stdout)
     acshandler.setFormatter(acsformatter)
@@ -88,6 +88,7 @@ def main():
     dbglog.info('gid:\t{}'.format(os.getgid()))
     dbglog.info('pid:\t{}'.format(os.getpid()))
     dbglog.info('prev_umask:\t{:04o}'.format(umask_prev))
+    dbglog.info('cmd:\t{}'.format(cmd))
 
     # start filesystem ###
     fsops = fusefs.Fusebox(os.path.abspath('/'), os.path.abspath(MOUNTPOINT))

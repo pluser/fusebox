@@ -205,7 +205,7 @@ class Fusebox(pyfuse3.Operations):
         return vinfo.getattr()
 
     async def opendir(self, vnode, ctx):
-        _acslog.info('OPENDIR: {}'.format(self.vm[vnode].paths))
+        _acslog.debug('OPENDIR: {}'.format(self.vm[vnode].paths))
         return vnode
 
     # def _listdir(self, vinfo_p):
@@ -245,7 +245,6 @@ class Fusebox(pyfuse3.Operations):
 
     async def readdir(self, vnode, offset, token):
         vinfo_p = self.vm[vnode]
-        _opslog.debug('readdir called: {}'.format(vinfo_p.path))
         entries = self._readdir(vinfo_p)
         _opslog.debug('read %d entries, starting at %d', len(entries), offset)
         # FIXME: result is break if entries is changed between two calls to readdir()
@@ -264,13 +263,13 @@ class Fusebox(pyfuse3.Operations):
             # Don't count up reference count if want_next_entry is False
             path_c = self.vm.make_path(vinfo_p.path, name)
             vinfo_c.add_path(path_c)
-        _acslog.info('READDIR: {}'.format(vinfo_p.path))
+        _acslog.debug('READDIR: {}'.format(vinfo_p.path))
 
     async def mknod(self, parent_inode, name, mode, rdev, ctx):
         vinfo_p = self.vm[parent_inode]
         path = self.vm.make_path(vinfo_p.path, os.fsdecode(name))
         if self.auditor.ask_discard(path):
-            _acslog.info('MKDIR-FAKE: {}'.format(path))
+            _acslog.debug('MKDIR-FAKE: {}'.format(path))
             attr = self.vinfo_null.getattr()
             attr.st_mode = mode & ~ctx.umask
             return attr
@@ -281,7 +280,7 @@ class Fusebox(pyfuse3.Operations):
             raise pyfuse3.FUSEError(exc.errno)
         vinfo_c = self.vm.create_vinfo_physical()
         vinfo_c.add_path(path)
-        _acslog.info('MKNOD: {}'.format(path))
+        _acslog.debug('MKNOD: {}'.format(path))
         return vinfo_c.getattr()
 
     async def mkdir(self, vnode_parent, name, mode, ctx):
@@ -289,7 +288,7 @@ class Fusebox(pyfuse3.Operations):
         if not self.auditor.ask_writable(path):
             raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
         if self.auditor.ask_discard(path):
-            _acslog.info('MKDIR-FAKE: {}'.format(path))
+            _acslog.debug('MKDIR-FAKE: {}'.format(path))
             attr = self.vinfo_null.getattr()
             attr.st_mode &= ~stat.S_IFREG  # make sure this is not regular file
             attr.st_mode |= stat.S_IFDIR  # make sure this is directory
@@ -301,7 +300,7 @@ class Fusebox(pyfuse3.Operations):
             raise pyfuse3.FUSEError(exc.errno)
         vinfo_c = self.vm.create_vinfo_physical()
         vinfo_c.add_path(path)
-        _acslog.info('MKDIR: {}'.format(path))
+        _acslog.debug('MKDIR: {}'.format(path))
         return vinfo_c.getattr()
 
     async def rmdir(self, vnode_parent, name, ctx):
@@ -310,18 +309,18 @@ class Fusebox(pyfuse3.Operations):
         if not self.auditor.ask_writable(path):
             raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
         if self.auditor.ask_discard(path):
-            _acslog.info('RMDIR-FAKE: {}'.format(path))
+            _acslog.debug('RMDIR-FAKE: {}'.format(path))
             return
         try:
             os.rmdir(path)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
         vinfo.remove_path(path)
-        _acslog.info('RMDIR: {}'.format(path))
+        _acslog.debug('RMDIR: {}'.format(path))
 
     async def open(self, vnode, flags, ctx):
         vinfo = self.vm[vnode]
-        _acslog.info('OPEN: {}'.format(vinfo.path))
+        _acslog.debug('OPEN: {}'.format(vinfo.path))
         if vinfo.virtual:
             fd = FD(os.open('/dev/null', flags))  # reserve file descriptor number
             vinfo.open_vnode(fd, '/dev/null', flags, discard=False)
@@ -360,7 +359,7 @@ class Fusebox(pyfuse3.Operations):
 
     async def read(self, fd, offset, length):
         vinfo = self.vm.get(fd=fd)
-        _acslog.info('READ: {}'.format(vinfo))
+        _acslog.debug('READ: {}'.format(vinfo))
         #if not vinfo.virtual and not self.auditor.ask_readable(vinfo.path):
         #    raise pyfuse3.FUSEError(errno.EACCES)
         return vinfo.read(fd, offset, length)
@@ -379,7 +378,7 @@ class Fusebox(pyfuse3.Operations):
                 raise pyfuse3.FUSEError(exc.errno)
             self.vinfo_null.open_vnode(fd, '/dev/null', flags & ~os.O_CREAT, discard=True)
             self.vinfo_null.add_path(path)
-            _acslog.info('CREATE-FAKE: {}'.format(path))
+            _acslog.debug('CREATE-FAKE: {}'.format(path))
             return pyfuse3.FileInfo(fh=fd), self.vinfo_null.getattr()
 
         vinfo = self.vm.create_vinfo_physical()
@@ -390,12 +389,12 @@ class Fusebox(pyfuse3.Operations):
             raise pyfuse3.FUSEError(exc.errno)
         vinfo.add_path(path)
         vinfo.open_vnode(fd, path, flags | os.O_CREAT | os.O_TRUNC, discard=False)
-        _acslog.info('CREATE: {}'.format(path))
+        _acslog.debug('CREATE: {}'.format(path))
         return pyfuse3.FileInfo(fh=fd), vinfo.getattr()
 
     async def write(self, fd, offset, buf):
         vinfo = self.vm.get(fd=fd)
-        _acslog.info('WRITE: {}'.format(vinfo))
+        _acslog.debug('WRITE: {}'.format(vinfo))
         #if not vinfo.virtual and not self.auditor.ask_writable(vinfo.path):
         #    raise pyfuse3.FUSEError(errno.EACCES)
         if not vinfo.virtual and vinfo.fdparam[fd].discard:
@@ -422,7 +421,7 @@ class Fusebox(pyfuse3.Operations):
             os.rename(path_old, path_new)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
-        _acslog.info('RENAME: {} -> {}'.format(path_old, path_new))
+        _acslog.debug('RENAME: {} -> {}'.format(path_old, path_new))
         if path_old in self.vm:
             vinfo = self.vm[path_old]
             vinfo.add_path(path_new, inc_ref=False)
@@ -436,14 +435,14 @@ class Fusebox(pyfuse3.Operations):
         if not self.auditor.ask_writable(path):
             raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
         if self.auditor.ask_discard(path):
-            _acslog.info('LINK-FAKE: {}'.format(path))
+            _acslog.debug('LINK-FAKE: {}'.format(path))
             return self.vinfo_null.getattr()
         try:
             os.link(self.vm[vnode].path, path, follow_symlinks=False)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
         vinfo.add_path(path)
-        _acslog.info('LINK: {}'.format(path))
+        _acslog.debug('LINK: {}'.format(path))
         return vinfo.getattr()
 
     async def unlink(self, vnode_parent, name_enced, ctx):
@@ -454,14 +453,14 @@ class Fusebox(pyfuse3.Operations):
         if not self.auditor.ask_writable(path):
             raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
         if self.auditor.ask_discard(path):
-            _acslog.info('UNLINK-FAKE: {}'.format(path))
+            _acslog.debug('UNLINK-FAKE: {}'.format(path))
             return
         try:
             os.unlink(path)
         except OSError as exc:
             raise pyfuse3.FUSEError(exc.errno)
         vinfo.remove_path(path)
-        _acslog.info('UNLINK: {}'.format(path))
+        _acslog.debug('UNLINK: {}'.format(path))
 
     async def symlink(self, vnode_dst_parent, dst_enced, src_enced, ctx):
         name_src = os.fsdecode(src_enced)
@@ -471,7 +470,7 @@ class Fusebox(pyfuse3.Operations):
         if not self.auditor.ask_writable(path_dst):
             raise pyfuse3.FUSEError(errno.EACCES)  # Permission denied
         if self.auditor.ask_discard(path_dst):
-            _acslog.info('SYMLINK-FAKE: {}'.format(path_dst))
+            _acslog.debug('SYMLINK-FAKE: {}'.format(path_dst))
             return self.vinfo_null.getattr()
         try:
             os.symlink(name_src, path_dst)
@@ -480,5 +479,5 @@ class Fusebox(pyfuse3.Operations):
             raise pyfuse3.FUSEError(exc.errno)
         vinfo_dst = self.vm.create_vinfo_physical()
         vinfo_dst.add_path(path_dst)
-        _acslog.info('SYMLINK: {}'.format(path_dst))
+        _acslog.debug('SYMLINK: {}'.format(path_dst))
         return vinfo_dst.getattr()
