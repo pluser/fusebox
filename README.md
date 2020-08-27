@@ -48,21 +48,25 @@ The sandbox currently used in the Portage package system hooks up writes to the 
    ```
 
 1. To integrate with portage, please replace files in `patch/`.
-    ```
-    # cp patch/ebuild.sh /usr/lib/portage/python3.7/ebuild.sh
-    # cp patch/phase-functions.sh /usr/lib/portage/python3.7/phase-functions.sh
-    ```
+   ```
+   # cp patch/ebuild.sh /usr/lib/portage/python3.7/ebuild.sh
+   # cp patch/phase-functions.sh /usr/lib/portage/python3.7/phase-functions.sh
+   ```
+   or in the portage source directory,
+   ```
+   patch -p1 < patch/portage-2.3.103.patch
+   ```
 
 1. cd to ebuild directory and try to start ebuild phases.
-    ```
-    # cd /var/db/repos/gentoo/app-misc/hello
-    # ebuild hello-2.10-r1.ebuild install
-    ```
+   ```
+   # cd /var/db/repos/gentoo/app-misc/hello
+   # ebuild hello-2.10-r1.ebuild install
+   ```
 
 1. Exit main program will cause automatically closing Fusebox mount.
-    ```
-    # exit
-    ```
+   ```
+   # exit
+   ```
 
 ## Features
 ### Access Control
