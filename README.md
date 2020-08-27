@@ -17,53 +17,52 @@ The sandbox currently used in the Portage package system hooks up writes to the 
 `python -m fusebox.fuseboxing /bin/bash`
 
 1. In default, ACL feature is disabled.
-```
-*** Fusebox Status ***
-uid:    0
-gid:    0
-pid:    127607
-prev_umask:     0022
-cmd:    ['/bin/bash']
-acl:    disengaged
-mount:  /tmp/tmp5k7xrkes
-@@@ Fusebox Launched in fuseboxing.py @@@
-```
+    ```
+    *** Fusebox Status ***
+    uid:    0
+    gid:    0
+    pid:    127607
+    prev_umask:     0022
+    cmd:    ['/bin/bash']
+    acl:    disengaged
+    mount:  /tmp/tmp5k7xrkes
+    @@@ Fusebox Launched in fuseboxing.py @@@
+    ```
 
-to make enable, `echo 1 > /fuseboxctlv1/acl_switch`, and
-to make disable, `echo 0 > /fuseboxctlv1/acl_switch`.
-You can read the file to sense whether ACL feature is on/off with
-`cat /fuseboxctlv1/acl_switch`.
+   to make enable, `echo 1 > /fuseboxctlv1/acl_switch`, and
+   to make disable, `echo 0 > /fuseboxctlv1/acl_switch`.
+   You can read the file to sense whether ACL feature is on/off with `cat /fuseboxctlv1/acl_switch`.
 
-Also, ACL is readable/writable.
-```
-# echo addread / >> /fuseboxctlv1/acl
-Permitted reading from path </>.
-# echo denywrite /usr >> /fuseboxctlv1/acl
-Prohibited writing to path </usr>.
-cat /fuseboxctlv1/acl
-# Don't remove a next line
-clearall
-
-allowread /
-denywrite /usr
-```
+   Also, ACL is readable/writable.
+   ```
+   # echo addread / >> /fuseboxctlv1/acl
+   Permitted reading from path </>.
+   # echo denywrite /usr >> /fuseboxctlv1/acl
+   Prohibited writing to path </usr>.
+   cat /fuseboxctlv1/acl
+   # Don't remove a next line
+   clearall
+   
+   allowread /
+   denywrite /usr
+   ```
 
 1. To integrate with portage, please replace files in `patch/`.
-```
-# cp patch/ebuild.sh /usr/lib/portage/python3.7/ebuild.sh
-# cp patch/phase-functions.sh /usr/lib/portage/python3.7/phase-functions.sh
-```
+    ```
+    # cp patch/ebuild.sh /usr/lib/portage/python3.7/ebuild.sh
+    # cp patch/phase-functions.sh /usr/lib/portage/python3.7/phase-functions.sh
+    ```
 
 1. cd to ebuild directory and try to start ebuild phases.
-```
-# cd /var/db/repos/gentoo/app-misc/hello
-# ebuild hello-2.10-r1.ebuild install
-```
+    ```
+    # cd /var/db/repos/gentoo/app-misc/hello
+    # ebuild hello-2.10-r1.ebuild install
+    ```
 
 1. Exit main program will cause automatically closing Fusebox mount.
-```
-# exit
-```
+    ```
+    # exit
+    ```
 
 ## Features
 ### Access Control
