@@ -84,7 +84,6 @@ def main():
         dbglog.setLevel(logging.DEBUG)
     else:
         dbglog.setLevel(logging.INFO)
-    dbglog.setLevel(logging.WARNING)
     acslog.setLevel(logging.INFO)
     acsformatter = logging.Formatter()
     acshandler = logging.StreamHandler(sys.stdout)
@@ -94,6 +93,16 @@ def main():
     # setting process environment
     umask_prev = os.umask(0)  # to respect file permission which user specified
 
+    # initialize filesystem ###
+    fsops = fusefs.Fusebox(os.path.abspath('/'), os.path.abspath(MOUNTPOINT))
+    fsops.auditor.enabled = False
+    fuse_options = set(pyfuse3.default_options)
+    fuse_options.add('fsname=fusefs')
+    if args.pyfuse_debug:
+        fuse_options.add('debug')
+    fuse_options.add('dev')
+    fuse_options.add('allow_other')
+
     # print current status
     dbglog.info('*** Fusebox Status ***')
     dbglog.info('uid:\t{}'.format(os.getuid()))
@@ -101,18 +110,16 @@ def main():
     dbglog.info('pid:\t{}'.format(os.getpid()))
     dbglog.info('prev_umask:\t{:04o}'.format(umask_prev))
     dbglog.info('cmd:\t{}'.format(cmd))
+    dbglog.info('acl:\t{}'.format('engaged' if fsops.auditor.enabled else 'disengaged'))
 
-    # start filesystem ###
-    fsops = fusefs.Fusebox(os.path.abspath('/'), os.path.abspath(MOUNTPOINT))
-    fuse_options = set(pyfuse3.default_options)
-    fuse_options.add('fsname=fusefs')
-    if args.fusebox_debug:
-        fuse_options.add('debug')
-    fuse_options.add('dev')
-    fuse_options.add('allow_other')
-    pyfuse3.init(fsops, MOUNTPOINT, fuse_options)  # From this point, accessing under mountpoint will be blocked.
-    fsops.auditor.allowread('/')  # FIXME: allow all access to test...
-    fsops.auditor.allowwrite('/')  # FIXME: allow all access to test...
+    # start filesystem
+    pyfuse3.init(fsops, MOUNTPOINT, fuse_options)  # From this point, accessing under the mountpoint will be blocked.
+
+    #fsops.auditor.allowread('/')  # FIXME: allow all access to test...
+    #fsops.auditor.allowwrite('/')  # FIXME: allow all access to test...
+    #if 'SANDBOX_ON' not in os.environ or os.environ['SANDBOX_ON'] == '0':
+    #    fsops.auditor.allowread('/')  # FIXME: allow all access to test...
+    #    fsops.auditor.allowwrite('/')  # FIXME: allow all access to test...
 
     #pipe_reciver, pipe_sender = os.pipe()
     #os.set_inheritable(pipe_reciver, True)
