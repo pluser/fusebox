@@ -10,6 +10,8 @@ import argparse
 import logging
 import subprocess
 import multiprocessing
+import tempfile
+import atexit
 import trio
 import pyfuse3
 from . import fusefs
@@ -17,16 +19,16 @@ from . import fusefs
 logger_root = logging.getLogger('Fusebox')
 dbglog = logger_root.getChild('operation')
 acslog = logger_root.getChild('access')
-MOUNTPOINT = '/tmp/test'
+#MOUNTPOINT = '/tmp/test'
 
-def launcher(cmd, pipe_stdin):
+def launcher(cmd, pipe_stdin, mountpoint):
     curwd = os.getcwd()
-    subprocess.run(['mount', '--types', 'proc', '/proc', MOUNTPOINT+'/proc'])
-    subprocess.run(['mount', '--rbind', '/sys', MOUNTPOINT+'/sys'])
-    subprocess.run(['mount', '--make-rslave', MOUNTPOINT+'/sys'])
-    subprocess.run(['mount', '--rbind', '/dev', MOUNTPOINT+'/dev'])
-    subprocess.run(['mount', '--make-rslave', MOUNTPOINT+'/dev'])
-    os.chroot(MOUNTPOINT)  # now, process is in the jail
+    subprocess.run(['mount', '--types', 'proc', '/proc', mountpoint+'/proc'])
+    subprocess.run(['mount', '--rbind', '/sys', mountpoint+'/sys'])
+    subprocess.run(['mount', '--make-rslave', mountpoint+'/sys'])
+    subprocess.run(['mount', '--rbind', '/dev', mountpoint+'/dev'])
+    subprocess.run(['mount', '--make-rslave', mountpoint+'/dev'])
+    os.chroot(mountpoint)  # now, process is in the jail
     os.chdir(curwd)  # go to the working directory on sandbox
     print('@@@ Fusebox Launched in fuseboxing.py @@@')
     # FIXME: shuld be respect uid and gid
@@ -94,7 +96,10 @@ def main():
     umask_prev = os.umask(0)  # to respect file permission which user specified
 
     # initialize filesystem ###
-    fsops = fusefs.Fusebox(os.path.abspath('/'), os.path.abspath(MOUNTPOINT))
+    ctx_mountpoint = tempfile.TemporaryDirectory()
+    atexit.register(lambda: ctx_mountpoint.cleanup())  # reserve cleanup for mountpoint
+    mountpoint = ctx_mountpoint.name
+    fsops = fusefs.Fusebox(os.path.abspath('/'), os.path.abspath(mountpoint))
     fsops.auditor.enabled = False
     fuse_options = set(pyfuse3.default_options)
     fuse_options.add('fsname=fusefs')
@@ -111,9 +116,10 @@ def main():
     dbglog.info('prev_umask:\t{:04o}'.format(umask_prev))
     dbglog.info('cmd:\t{}'.format(cmd))
     dbglog.info('acl:\t{}'.format('engaged' if fsops.auditor.enabled else 'disengaged'))
+    dbglog.info('mount:\t{}'.format(mountpoint))
 
     # start filesystem
-    pyfuse3.init(fsops, MOUNTPOINT, fuse_options)  # From this point, accessing under the mountpoint will be blocked.
+    pyfuse3.init(fsops, mountpoint, fuse_options)  # From this point, accessing under the mountpoint will be blocked.
 
     #fsops.auditor.allowread('/')  # FIXME: allow all access to test...
     #fsops.auditor.allowwrite('/')  # FIXME: allow all access to test...
@@ -125,7 +131,7 @@ def main():
     #os.set_inheritable(pipe_reciver, True)
     tmp_stdin = os.dup(sys.stdin.fileno())  # backup stdin fd. since multiprocessing will override stdin in forked process.
     os.set_inheritable(tmp_stdin, True)  # make sure to keep fd opened in forked process.
-    proc_cmd = multiprocessing.Process(target=launcher, args=(cmd, tmp_stdin))
+    proc_cmd = multiprocessing.Process(target=launcher, args=(cmd, tmp_stdin, mountpoint))
     proc_fusebox = multiprocessing.Process(target=start_sandbox)
     del tmp_stdin  # forget backuped pipe in parent process as it is not needed.
     proc_cmd.start()
