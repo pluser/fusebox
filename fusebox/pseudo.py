@@ -113,7 +113,13 @@ class AclControllerVnodeInfo(VnodeInfoPseudo):
         return retval
 
     def write(self, fd: int, offset: int, buf: bytes) -> int:
-        content = io.BytesIO(self._contents().encode())
+        if os.O_TRUNC & self.manager.get(fd=fd).fdparam[fd].mode:
+            print('WRITE_WITH_TRUNC')
+            self.auditor.clearall()
+            content = io.BytesIO(b'')
+            print('offset: {}'.format(offset))
+        else:
+            content = io.BytesIO(self._contents().encode())
         content.seek(offset)
         content.write(buf)
         content.seek(0)

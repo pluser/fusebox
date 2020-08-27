@@ -9,7 +9,13 @@ import errno
 AbsPath = typ.NewType('AbsPath', str)
 Vnode = typ.NewType('Vnode', int)
 FD = typ.NewType('FD', int)
-FDParams = namedtuple('FDParams', 'path mode discard')
+#FDParams = namedtuple('FDParams', 'path mode discard')
+
+class FDParams(typ.NamedTuple):
+    path: AbsPath
+    mode: int
+    discard: bool
+
 
 class VnodeInfo(ABC):
     def __init__(self, manager: 'VnodeManager') -> None:
