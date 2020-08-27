@@ -55,13 +55,25 @@ def start_sandbox():
 def main():
     ### parse command line ###
     parser = argparse.ArgumentParser()
-    parser.add_argument('--fusebox_debug')
-    args, cmd = parser.parse_known_args()
+    parser.add_argument('--fusebox_debug', action='store_true')
+    parser.add_argument('--pyfuse_debug', action='store_true')
+    parser.add_argument('command')
+    parser.add_argument('command_args', nargs=argparse.REMAINDER)
+    #args, cmd = parser.parse_known_args()
+    args = parser.parse_args()
+
+    # assemble command and that arguments
+    cmd = list()
+    cmd.append(args.command)
+    cmd.extend(args.command_args)
+    #if not cmd:
+    #    dbglog.error('Invalid Arguments. command is not specified.')
+    #    sys.exit(1)
     # sometimes cmd is taken as blob of args string
     # i.e. cmd = ['/usr/lib/portage/python3.7/misc-functions.sh die_hooks']
     # if so, split it.
-    if len(cmd) == 1:
-        cmd = list(cmd[0].split())
+    #if len(cmd) == 1:
+    #    cmd = list(cmd[0].split())
 
     ### initialize logger ###
     dbglogformatter = logging.Formatter()
