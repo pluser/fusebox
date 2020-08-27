@@ -12,6 +12,7 @@ import subprocess
 import multiprocessing
 import tempfile
 import atexit
+import signal
 import trio
 import pyfuse3
 from . import fusefs
@@ -141,7 +142,12 @@ def main():
     #print('sended')
 
     proc_cmd.join()  # to eliminate zombie process
+    proc_cmd.close()
+    # given commands are exited.
+    pyfuse3.close(unmount=True)  # release unnecessary resource
+    proc_fusebox.terminate()  # send exit signal to fuse process
     proc_fusebox.join()
+    proc_fusebox.close()
 
 
 if __name__ == '__main__':
