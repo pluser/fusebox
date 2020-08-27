@@ -44,61 +44,63 @@ class TestVnodeInfoPseudo(unittest.TestCase):
 
     def test_ctl_acl(self):
         manager = MagicMock()
+        manager.get(fd=123).fdparam[123].mode = 0
         auditor = MagicMock()
         vinfo = pseudo.AclControllerVnodeInfo(manager=manager, auditor=auditor)
         manager.notify_vinfo_bind.assert_called_with(vinfo)
         self.assertTrue(stat.S_ISREG(vinfo.getattr().st_mode))  # Regular file
         vinfo._contents = lambda: '#foobar\n'
         self.assertEqual(b'#foobar\n', vinfo.read(0, 0, 100))
-        vinfo.write(0, len(vinfo._contents()), b'allowread /test/root/foo/bar')
+        vinfo.write(123, len(vinfo._contents()), b'allowread /test/root/foo/bar')
         auditor.allowread.assert_called_with('/test/root/foo/bar')
 
     def test_ctl_acl_command(self):
         def enc(x):
             return x.encode('utf-8')
         mock_manager = MagicMock()
+        mock_manager.get(fd=123).fdparam[123].mode = 0
         mock_auditor = MagicMock()
         vinfo = pseudo.AclControllerVnodeInfo(manager=mock_manager, auditor=mock_auditor)
 
-        vinfo.write(0, vinfo.getattr().st_size, enc('INVALID-ORDER /test/foo/bar'))
+        vinfo.write(123, vinfo.getattr().st_size, enc('INVALID-ORDER /test/foo/bar'))
         mock_auditor.assert_not_called()
         mock_auditor.reset_mock()
 
-        vinfo.write(0, vinfo.getattr().st_size, enc('allowread /test'))
+        vinfo.write(123, vinfo.getattr().st_size, enc('allowread /test'))
         mock_auditor.allowread.assert_called_with('/test')
         mock_auditor.reset_mock()
 
-        vinfo.write(0, vinfo.getattr().st_size, enc('allowwrite /test'))
+        vinfo.write(123, vinfo.getattr().st_size, enc('allowwrite /test'))
         mock_auditor.allowwrite.assert_called_with('/test')
         mock_auditor.reset_mock()
 
-        vinfo.write(0, vinfo.getattr().st_size, enc('denyread /test'))
+        vinfo.write(123, vinfo.getattr().st_size, enc('denyread /test'))
         mock_auditor.denyread.assert_called_with('/test')
         mock_auditor.reset_mock()
 
-        vinfo.write(0, vinfo.getattr().st_size, enc('denywrite /test'))
+        vinfo.write(123, vinfo.getattr().st_size, enc('denywrite /test'))
         mock_auditor.denywrite.assert_called_with('/test')
         mock_auditor.reset_mock()
 
-        vinfo.write(0, vinfo.getattr().st_size, enc('discardwrite /test'))
+        vinfo.write(123, vinfo.getattr().st_size, enc('discardwrite /test'))
         mock_auditor.discardwrite.assert_called_with('/test')
         mock_auditor.reset_mock()
 
-        vinfo.write(0, vinfo.getattr().st_size, enc('addread /test'))
+        vinfo.write(123, vinfo.getattr().st_size, enc('addread /test'))
         mock_auditor.allowread.assert_called_with('/test')
         mock_auditor.reset_mock()
 
-        vinfo.write(0, vinfo.getattr().st_size, enc('addwrite /test'))
+        vinfo.write(123, vinfo.getattr().st_size, enc('addwrite /test'))
         mock_auditor.allowread.assert_called_with('/test')
         mock_auditor.allowwrite.assert_called_with('/test')
         mock_auditor.reset_mock()
 
-        vinfo.write(0, vinfo.getattr().st_size, enc('adddeny /test'))
+        vinfo.write(123, vinfo.getattr().st_size, enc('adddeny /test'))
         mock_auditor.denyread.assert_called_with('/test')
         mock_auditor.denywrite.assert_called_with('/test')
         mock_auditor.reset_mock()
 
-        vinfo.write(0, vinfo.getattr().st_size, enc('addpredict /test'))
+        vinfo.write(123, vinfo.getattr().st_size, enc('addpredict /test'))
         mock_auditor.allowread.assert_called_with('/test')
         mock_auditor.discardwrite.assert_called_with('/test')
         mock_auditor.reset_mock()
