@@ -9,7 +9,6 @@ import errno
 AbsPath = typ.NewType('AbsPath', str)
 Vnode = typ.NewType('Vnode', int)
 FD = typ.NewType('FD', int)
-#FDParams = namedtuple('FDParams', 'path mode discard')
 
 class FDParams(typ.NamedTuple):
     path: AbsPath
@@ -90,8 +89,6 @@ class VnodeInfo(ABC):
         if abspath in self._paths:  # path may be removed by cleanup_mapping() already
             self._paths.remove(abspath)
         self.manager.notify_path_remove(self, path)
-        #if not self._paths and not self._fds:
-        #    self.manager.notify_vinfo_unbind(self)
 
     def open_vnode(self, fd: FD, path, mode, discard=False) -> None:
         """Notifying file descriptor was opened"""
@@ -211,8 +208,6 @@ class VnodeInfoGenuine(VnodeInfo):
         for name in pyfuse3.listdir(self.path):
             if name == '.' or name == '..':
                 continue  # exclude pseudo files and directories
-            #if self.vm.path_mountpoint in (self.manager.make_path(p, name) for p in self.paths):
-            #    continue  # Don't include mountpoint itself to directory entry
             if not os.path.lexists(self.manager.make_path(self.path, name)):
                 continue  # listdir() returns invalid name for some reason. check if it exists and exclude it
             path = self.manager.make_path(self.path, name)

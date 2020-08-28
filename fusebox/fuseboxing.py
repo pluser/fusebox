@@ -32,21 +32,9 @@ def launcher(cmd, pipe_stdin, mountpoint):
     os.chroot(mountpoint)  # now, process is in the jail
     os.chdir(curwd)  # go to the working directory on sandbox
     print('@@@ Fusebox Launched in fuseboxing.py @@@')
-    # FIXME: shuld be respect uid and gid
+    # TODO: shuld be respect uid and gid
     # which should be given from emerge process
-    #print(os.read(pipe_stdin, 7))
-    #cmd.insert(0, '/usr/bin/sandbox')
-    #print(cmd)
-    #os.dup2(pipe_stdin, sys.stdin.fileno())
-    #os.dup2(pipe_stdin, 0)
-    #print(sys.stdin.fileno())
-    #sys.stdin = os.fdopen(0, 'r')
     proc = subprocess.Popen(cmd, stdin=pipe_stdin)
-    #proc.communicate()
-    #proc.communicate()
-    #print(proc.stdin.fileno())
-    #os.dup2(pipe_stdin, proc.stdin.fileno())
-    #os.write(proc.stdin.fileno(), b'abcd')
     proc.wait()
 
 def start_sandbox():
@@ -69,14 +57,6 @@ def main():
     cmd = list()
     cmd.append(args.command)
     cmd.extend(args.command_args)
-    #if not cmd:
-    #    dbglog.error('Invalid Arguments. command is not specified.')
-    #    sys.exit(1)
-    # sometimes cmd is taken as blob of args string
-    # i.e. cmd = ['/usr/lib/portage/python3.7/misc-functions.sh die_hooks']
-    # if so, split it.
-    #if len(cmd) == 1:
-    #    cmd = list(cmd[0].split())
 
     ### initialize logger ###
     dbglogformatter = logging.Formatter()
@@ -122,14 +102,6 @@ def main():
     # start filesystem
     pyfuse3.init(fsops, mountpoint, fuse_options)  # From this point, accessing under the mountpoint will be blocked.
 
-    #fsops.auditor.allowread('/')  # FIXME: allow all access to test...
-    #fsops.auditor.allowwrite('/')  # FIXME: allow all access to test...
-    #if 'SANDBOX_ON' not in os.environ or os.environ['SANDBOX_ON'] == '0':
-    #    fsops.auditor.allowread('/')  # FIXME: allow all access to test...
-    #    fsops.auditor.allowwrite('/')  # FIXME: allow all access to test...
-
-    #pipe_reciver, pipe_sender = os.pipe()
-    #os.set_inheritable(pipe_reciver, True)
     tmp_stdin = os.dup(sys.stdin.fileno())  # backup stdin fd. since multiprocessing will override stdin in forked process.
     os.set_inheritable(tmp_stdin, True)  # make sure to keep fd opened in forked process.
     proc_cmd = multiprocessing.Process(target=launcher, args=(cmd, tmp_stdin, mountpoint))
@@ -137,9 +109,6 @@ def main():
     del tmp_stdin  # forget backuped pipe in parent process as it is not needed.
     proc_cmd.start()
     proc_fusebox.start()
-    #os.write(pipe_sender, b'1234\n')
-    #os.close(pipe_sender)
-    #print('sended')
 
     proc_cmd.join()  # to eliminate zombie process
     proc_cmd.close()
