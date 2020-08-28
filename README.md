@@ -25,7 +25,7 @@ The sandbox currently used in the Portage package system hooks up writes to the 
 
 1.	Start fusebox with arbitary program. `python -m fusebox.fuseboxing /bin/bash`
 
-1.	In default, ACL feature is disabled.
+1.	In default, access control feature is disabled.
 	```
 	*** Fusebox Status ***
 	uid:	0
@@ -38,9 +38,9 @@ The sandbox currently used in the Portage package system hooks up writes to the 
 	@@@ Fusebox Launched in fuseboxing.py @@@
 	```
 
-	to make ACL feature enable, `echo 1 > /fuseboxctlv1/acl_switch`, and  
-	to make ACL feature disable, `echo 0 > /fuseboxctlv1/acl_switch`.  
-	You can read the file to check whether ACL feature is on/off with `cat /fuseboxctlv1/acl_switch`.
+	to make access control feature enable, `echo 1 > /fuseboxctlv1/acl_switch`, and  
+	to make access control feature disable, `echo 0 > /fuseboxctlv1/acl_switch`.  
+	You can read the file to check whether access control feature is on/off with `cat /fuseboxctlv1/acl_switch`.
 
 1.	To grant access, you can write pseudo file as `/fuseboxctlv1/acl` in the mountpoint.  
 	Syntax is like below.
@@ -68,7 +68,7 @@ The sandbox currently used in the Portage package system hooks up writes to the 
 	Prohibited writing to path </usr>.
 	```
 
-	Also, you can read currenc ACL from the file.
+	Also, you can read current ACL from the file.
 
 	```
 	$ cat /fuseboxctlv1/acl
@@ -79,13 +79,13 @@ The sandbox currently used in the Portage package system hooks up writes to the 
 	denywrite /usr
 	```
 
-1.	To integrate with portage, please apply the patch.
+1.	To integrate with portage, please apply the patch to the Portage.
 
 	```
 	patch -p1 < patch/portage-2.3.103.patch
 	```
 
-	please replace files in `patch/`.
+	or, please replace files in `patch/`.
 
 	```
 	# cp patch/ebuild.sh /usr/lib/portage/python3.7/ebuild.sh
@@ -126,7 +126,7 @@ The sandbox currently used in the Portage package system hooks up writes to the 
 	. - Project root.
 	├── fusebox/ - All source code is here.
 	│   ├── __init__.py
-	│   ├── auditor.py - ACL related code.
+	│   ├── auditor.py - Access control related code.
 	│   ├── fusebox.py - Program entry point (may be deplicated).
 	│   ├── fuseboxing.py - Program entry point. Parse arguments, invoke FUSE process, start specified program.
 	│   ├── fusefs.py - FUSE related code. Implementing filesystem.
